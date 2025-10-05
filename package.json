@@ -1,0 +1,11 @@
+{
+  "name": "lunasentri",
+  "private": true,
+  "version": "0.1.0",
+  "packageManager": "pnpm@10.18.0",
+  "workspaces": ["apps/*", "deploy/*"],
+  "scripts": {
+    "dev:web": "pnpm --filter web-next dev",
+    "build:web": "pnpm --filter web-next build"
+  }
+}

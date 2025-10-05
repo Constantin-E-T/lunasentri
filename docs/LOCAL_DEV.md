@@ -4,34 +4,53 @@
 
 - **Go**: v1.21 or higher
 - **Node.js**: v20 or higher
-- **npm**: v10 or higher
+- **pnpm**: v10 or higher
 
 ## Quick Start
 
 ### 1. Clone and Setup
+
 ```bash
 git clone <repository-url>
 cd lunasentri
+pnpm install
 ```
 
 ### 2. Start Backend (Terminal 1)
+
 ```bash
 cd apps/api-go
 go run main.go
 ```
+
 The API will be available at `http://localhost:8080`
 
 ### 3. Start Frontend (Terminal 2)
+
 ```bash
-cd apps/web-next
-npm install
-npm run dev
+# From root directory
+pnpm dev:web
 ```
+
 The web interface will be available at `http://localhost:3000`
 
 ## Development Commands
 
+### Root Workspace Commands
+
+```bash
+# Install all dependencies
+pnpm install
+
+# Start frontend development server
+pnpm dev:web
+
+# Build frontend for production
+pnpm build:web
+```
+
 ### Backend (apps/api-go)
+
 ```bash
 # Run development server
 make run
@@ -54,34 +73,41 @@ make check
 make clean
 ```
 
-### Frontend (apps/web-next)
+### Frontend (direct commands in apps/web-next)
+
 ```bash
-# Install dependencies
-npm install
+# Install dependencies (from root preferred)
+pnpm install
 
 # Run development server (with Turbopack)
-npm run dev
+pnpm dev
 
 # Build for production (with Turbopack)
-npm run build
+pnpm build
 
 # Start production server
-npm start
+pnpm start
 ```
 
 ## API Endpoints
 
 ### Backend (port 8080)
+
 - `GET /` - API welcome message
 - `GET /health` - Health check endpoint
 
 ### Frontend (port 3000)
+
 - Serves the Next.js application
 
 ## Project Structure
 
 ```
 lunasentri/
+├── pnpm-workspace.yaml   # Workspace configuration
+├── package.json          # Root package with workspace scripts
+├── pnpm-lock.yaml        # Dependency lockfile
+├── .npmrc                # pnpm configuration
 ├── apps/
 │   ├── api-go/           # Go backend
 │   │   ├── main.go       # Main server file
@@ -89,7 +115,7 @@ lunasentri/
 │   │   └── Dockerfile    # Container build
 │   └── web-next/         # Next.js frontend
 │       ├── app/          # App Router pages
-│       ├── Dockerfile    # Container build
+│       ├── Dockerfile    # Container build (uses pnpm)
 │       └── package.json  # Dependencies
 ├── deploy/               # Deployment configs
 └── docs/                 # Documentation
@@ -98,6 +124,7 @@ lunasentri/
 ## Docker Development
 
 ### Build and Run Backend
+
 ```bash
 cd apps/api-go
 docker build -t lunasentri-api .
@@ -105,6 +132,7 @@ docker run -p 8080:8080 lunasentri-api
 ```
 
 ### Build and Run Frontend
+
 ```bash
 cd apps/web-next
 docker build -t lunasentri-web .
@@ -120,5 +148,6 @@ docker run -p 3000:3000 lunasentri-web
 3. **Go version**: Ensure you're using Go v1.21 or higher
 
 ### Logs
+
 - Backend logs appear in the terminal where `go run main.go` is executed
 - Frontend logs appear in the terminal where `npm run dev` is executed

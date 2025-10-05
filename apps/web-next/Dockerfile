@@ -2,23 +2,29 @@
 FROM node:20-alpine AS deps
 WORKDIR /app
 
+# Install pnpm
+RUN npm install -g pnpm@10.18.0
+
 # Copy package files
-COPY package*.json ./
-RUN npm ci --only=production
+COPY package*.json pnpm-lock.yaml ./
+RUN pnpm install --prod --frozen-lockfile
 
 # Build stage
 FROM node:20-alpine AS builder
 WORKDIR /app
 
+# Install pnpm
+RUN npm install -g pnpm@10.18.0
+
 # Copy package files
-COPY package*.json ./
-RUN npm ci
+COPY package*.json pnpm-lock.yaml ./
+RUN pnpm install --frozen-lockfile
 
 # Copy source code
 COPY . .
 
 # Build the application
-RUN npm run build
+RUN pnpm build
 
 # Production stage
 FROM node:20-alpine AS runner
