@@ -30,14 +30,29 @@ This tells the Next.js frontend where to find the Go API. The `NEXT_PUBLIC_` pre
 
 #### Backend (apps/api-go) - Optional
 
-The backend supports CORS configuration via environment variable:
+The backend supports CORS configuration, database path, and admin user bootstrapping via environment variables:
 
 ```bash
 # Optional: Set allowed CORS origin (defaults to http://localhost:3000)
 export CORS_ALLOWED_ORIGIN=http://localhost:3000
+
+# Optional: Set database path (defaults to ./data/lunasentri.db)
+export DB_PATH=./data/lunasentri.db
+
+# Optional: Bootstrap admin user on startup (for first-run seeding)
+export ADMIN_EMAIL=admin@yourdomain.com
+export ADMIN_PASSWORD=your_secure_password
 ```
 
-If not set, the Go API defaults to allowing requests from `http://localhost:3000`.
+**Admin User Bootstrapping Notes:**
+
+- If both `ADMIN_EMAIL` and `ADMIN_PASSWORD` are set, an admin user will be created or updated on startup
+- Useful for first-run initialization or password rotation
+- The password is hashed with bcrypt (cost 12) before storage
+- **Security**: Use strong passwords and consider rotating credentials after initial setup
+- **Never log**: Raw passwords are never logged; only email and user ID are logged
+
+If not set, the Go API defaults to allowing requests from `http://localhost:3000` and stores the SQLite database at `./data/lunasentri.db`.
 
 ### 3. Start Backend (Terminal 1)
 
@@ -51,6 +66,7 @@ The API will be available at `http://localhost:8080` with CORS enabled for the f
 Expected output:
 
 ```
+Database initialized at: ./data/lunasentri.db
 LunaSentri API starting on port 8080 (endpoints: /, /health, /metrics, /ws) with CORS origin: http://localhost:3000
 ```
 
@@ -242,6 +258,16 @@ docker run -p 3000:3000 lunasentri-web
 | Variable | Required | Default | Description |
 |----------|----------|---------|-------------|
 | `CORS_ALLOWED_ORIGIN` | No | `http://localhost:3000` | Allowed CORS origin for API requests |
+| `DB_PATH` | No | `./data/lunasentri.db` | Path to SQLite database file (directory will be created if needed) |
+| `ADMIN_EMAIL` | No | - | Admin user email for bootstrap (requires `ADMIN_PASSWORD`) |
+| `ADMIN_PASSWORD` | No | - | Admin user password for bootstrap (requires `ADMIN_EMAIL`) |
+
+**Admin Bootstrap Notes:**
+
+- When both `ADMIN_EMAIL` and `ADMIN_PASSWORD` are set, an admin user is created/updated on startup
+- Passwords are hashed with bcrypt (cost 12) for secure storage
+- Useful for first-run initialization and password rotation
+- Raw passwords are never logged to maintain security
 
 ## Troubleshooting
 

@@ -22,3 +22,4 @@
 - 2025-10-06: Planning integration tests for /metrics endpoint to safeguard handler wiring.
 - 2025-10-06: Preparing CI pipeline to run go test (with -race) and Next build on GitHub Actions.
 - 2025-10-06: Approved CI workflow (Go -race/vet + Next build/tsc via pnpm action v2).
+- 2025-10-06: Approved SQLite storage layer (users table, migrations, DB_PATH env) as foundation for authentication.

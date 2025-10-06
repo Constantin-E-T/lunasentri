@@ -11,7 +11,9 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/Constantin-E-T/lunasentri/apps/api-go/internal/auth"
 	"github.com/Constantin-E-T/lunasentri/apps/api-go/internal/metrics"
+	"github.com/Constantin-E-T/lunasentri/apps/api-go/internal/storage"
 	"github.com/gorilla/websocket"
 )
 
@@ -190,6 +192,32 @@ func corsMiddleware(next http.Handler) http.Handler {
 func main() {
 	// Record server start time for uptime calculation
 	serverStartTime = time.Now()
+
+	// Get database path from environment variable
+	dbPath := os.Getenv("DB_PATH")
+	if dbPath == "" {
+		dbPath = "./data/lunasentri.db"
+	}
+
+	// Ensure data directory exists
+	if err := storage.EnsureDataDir(dbPath); err != nil {
+		log.Fatalf("Failed to create data directory: %v", err)
+	}
+
+	// Initialize database
+	store, err := storage.NewSQLiteStore(dbPath)
+	if err != nil {
+		log.Fatalf("Failed to initialize database: %v", err)
+	}
+	defer store.Close()
+
+	log.Printf("Database initialized at: %s", dbPath)
+
+	// Bootstrap admin user if environment variables are set
+	ctx := context.Background()
+	if err := auth.BootstrapAdmin(ctx, store); err != nil {
+		log.Fatalf("Failed to bootstrap admin user: %v", err)
+	}
 
 	// Initialize metrics collector
 	metricsCollector := metrics.NewSystemCollector()
