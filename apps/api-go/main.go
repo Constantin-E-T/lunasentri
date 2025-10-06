@@ -10,17 +10,54 @@ import (
 	"os/signal"
 	"syscall"
 	"time"
+
+	"github.com/Constantin-E-T/lunasentri/apps/api-go/internal/metrics"
 )
 
-// Metrics represents the system metrics response
-type Metrics struct {
-	CPUPct      float64 `json:"cpu_pct"`
-	MemUsedPct  float64 `json:"mem_used_pct"`
-	DiskUsedPct float64 `json:"disk_used_pct"`
-	UptimeS     float64 `json:"uptime_s"`
-}
+var (
+	serverStartTime time.Time
+)
 
-var serverStartTime time.Time
+// newServer creates a new HTTP server with the given collector
+func newServer(collector metrics.Collector, startTime time.Time) *http.ServeMux {
+	// Create a new ServeMux
+	mux := http.NewServeMux()
+
+	// Register handlers
+	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+		fmt.Fprintf(w, "LunaSentri API - Coming Soon")
+	})
+
+	mux.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		fmt.Fprintf(w, `{"status":"healthy"}`)
+	})
+
+	mux.HandleFunc("/metrics", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		
+		// Collect real system metrics
+		ctx, cancel := context.WithTimeout(r.Context(), 3*time.Second)
+		defer cancel()
+		
+		metricsData, err := collector.Snapshot(ctx)
+		if err != nil {
+			log.Printf("Failed to collect metrics: %v", err)
+			// Return zeroed metrics on error
+			metricsData = metrics.Metrics{}
+		}
+		
+		// Set real uptime
+		metricsData.UptimeS = time.Since(startTime).Seconds()
+		
+		if err := json.NewEncoder(w).Encode(metricsData); err != nil {
+			http.Error(w, "Internal Server Error", http.StatusInternalServerError)
+			return
+		}
+	})
+
+	return mux
+}
 
 // corsMiddleware adds CORS headers and handles preflight requests
 func corsMiddleware(next http.Handler) http.Handler {
@@ -51,38 +88,11 @@ func main() {
 	// Record server start time for uptime calculation
 	serverStartTime = time.Now()
 
-	// Create a new ServeMux
-	mux := http.NewServeMux()
+	// Initialize metrics collector
+	metricsCollector := metrics.NewSystemCollector()
 
-	// Register handlers
-	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
-		fmt.Fprintf(w, "LunaSentri API - Coming Soon")
-	})
-
-	mux.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
-		fmt.Fprintf(w, `{"status":"healthy"}`)
-	})
-
-	mux.HandleFunc("/metrics", func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
-		
-		// Calculate real uptime in seconds
-		uptime := time.Since(serverStartTime).Seconds()
-		
-		// TODO: Replace placeholder values with real system metrics
-		metrics := Metrics{
-			CPUPct:      45.2,  // Placeholder value
-			MemUsedPct:  67.8,  // Placeholder value
-			DiskUsedPct: 23.5,  // Placeholder value
-			UptimeS:     uptime, // Real uptime since server start
-		}
-		
-		if err := json.NewEncoder(w).Encode(metrics); err != nil {
-			http.Error(w, "Internal Server Error", http.StatusInternalServerError)
-			return
-		}
-	})
+	// Create server with real collector
+	mux := newServer(metricsCollector, serverStartTime)
 
 	// Create HTTP server with CORS middleware
 	port := "8080"

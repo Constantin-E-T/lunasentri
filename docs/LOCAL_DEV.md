@@ -217,3 +217,76 @@ docker run -p 3000:3000 lunasentri-web
 - Backend logs appear in the terminal where `go run main.go` is executed
 - Frontend logs appear in the terminal where `npm run dev` is executed
 - Browser DevTools Network tab shows API requests to `/metrics` endpoint
+
+## Continuous Integration (CI)
+
+### GitHub Actions Workflow
+
+The project uses GitHub Actions for automated testing on every push and pull request.
+
+**Workflow file**: `.github/workflows/ci.yml`
+
+### Jobs
+
+#### 1. Backend (Go)
+
+- **Triggers**: Push to `main`/`develop`, PRs to `main`
+- **Runner**: Ubuntu latest
+- **Steps**:
+  1. Checkout code
+  2. Set up Go 1.23 with caching
+  3. Install pnpm 10.18.0 (for monorepo dependencies)
+  4. Install root dependencies (`pnpm install --frozen-lockfile`)
+  5. Verify Go dependencies (`go mod verify`)
+  6. Build binary (`go build -v ./...`)
+  7. Run tests with race detector (`go test -race ./...`)
+  8. Run static analysis (`go vet ./...`)
+
+#### 2. Frontend (Next.js)
+
+- **Triggers**: Push to `main`/`develop`, PRs to `main`
+- **Runner**: Ubuntu latest
+- **Steps**:
+  1. Checkout code
+  2. Set up pnpm 10.18.0
+  3. Set up Node.js 20 with pnpm caching
+  4. Install dependencies (`pnpm install --frozen-lockfile`)
+  5. Build production bundle (`pnpm --filter web-next build`)
+  6. Type check TypeScript (`npx tsc --noEmit`)
+
+### Running CI Checks Locally
+
+Before pushing, you can run the same checks locally:
+
+**Backend:**
+
+```bash
+cd apps/api-go
+go mod verify
+go build -v ./...
+go test -race ./...
+go vet ./...
+```
+
+**Frontend:**
+
+```bash
+pnpm install --frozen-lockfile
+pnpm --filter web-next build
+cd apps/web-next && npx tsc --noEmit
+```
+
+### CI Features
+
+- **Caching**: Both jobs use caching to speed up builds
+  - Go: Automatic module caching via `setup-go@v5`
+  - pnpm: Automatic store caching via `setup-node@v4`
+- **Race Detection**: Go tests run with `-race` flag to catch concurrency bugs
+- **Type Safety**: TypeScript strict mode checks enforce type correctness
+- **Monorepo Support**: Uses pnpm workspace filtering for selective builds
+
+### Viewing CI Results
+
+- Check the "Actions" tab in GitHub to see workflow runs
+- Each job provides detailed logs and timing information
+- Failed checks block PR merges (if branch protection is enabled)

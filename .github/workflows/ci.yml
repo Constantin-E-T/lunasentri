@@ -11,40 +11,50 @@ jobs:
     name: Backend (Go)
     runs-on: ubuntu-latest
 
-    defaults:
-      run:
-        working-directory: ./apps/api-go
-
     steps:
       - uses: actions/checkout@v4
 
       - name: Set up Go
-        uses: actions/setup-go@v4
+        uses: actions/setup-go@v5
         with:
-          go-version: "1.22"
+          go-version: "1.23"
+          cache: true
 
-      - name: Verify dependencies
+      - name: Set up pnpm
+        uses: pnpm/action-setup@v2
+        with:
+          version: 10.18.0
+
+      - name: Install root dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Verify Go dependencies
+        working-directory: ./apps/api-go
         run: go mod verify
 
       - name: Build
+        working-directory: ./apps/api-go
         run: go build -v ./...
 
-      - name: Run tests
-        run: go test -v ./...
+      - name: Run tests with race detector
+        working-directory: ./apps/api-go
+        run: go test -race ./...
 
       - name: Run vet
+        working-directory: ./apps/api-go
         run: go vet ./...
 
   web-next:
     name: Frontend (Next.js)
     runs-on: ubuntu-latest
 
-    defaults:
-      run:
-        working-directory: ./apps/web-next
-
     steps:
       - uses: actions/checkout@v4
+
+      - name: Set up pnpm
+        uses: pnpm/action-setup@v2
+        with:
+          version: 10.18.0
 
       - name: Set up Node.js
         uses: actions/setup-node@v4
@@ -52,16 +62,12 @@ jobs:
           node-version: "20"
           cache: "pnpm"
 
-      - name: Install pnpm
-        uses: pnpm/action-setup@v3
-        with:
-          version: 10.18.0
-
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
-      - name: Build
-        run: pnpm build
+      - name: Build web-next
+        run: pnpm --filter web-next build
 
-      - name: Check types
+      - name: Type check
+        working-directory: ./apps/web-next
         run: npx tsc --noEmit

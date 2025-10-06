@@ -18,6 +18,7 @@ FROM gcr.io/distroless/static:nonroot
 
 WORKDIR /
 
+
 # Copy the binary from builder stage
 COPY --from=builder /app/lunasentri-api .
 

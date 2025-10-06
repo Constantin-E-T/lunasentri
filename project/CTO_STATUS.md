@@ -17,3 +17,8 @@
 - 2025-10-06: Initialized CTO status log and captured baseline role + knowledge from Constantin's instructions.
 - 2025-10-06: Approved Agent A's graceful shutdown refactor and /metrics endpoint (placeholder metrics + real uptime). Next focus: design system metrics collector + begin frontend surface.
 - 2025-10-06: Approved Agent B's live metrics card consuming /metrics (5s polling, error/loading states). Upcoming work: real metrics collection + websocket roadmap.
+- 2025-10-06: Approved documentation refresh covering env vars, CORS setup, and quick start instructions across README + LOCAL_DEV.
+- 2025-10-06: Approved SystemCollector providing real CPU/mem/disk metrics via gopsutil with thread-safe logging and unit tests.
+- 2025-10-06: Planning integration tests for /metrics endpoint to safeguard handler wiring.
+- 2025-10-06: Preparing CI pipeline to run go test (with -race) and Next build on GitHub Actions.
+- 2025-10-06: Approved CI workflow (Go -race/vet + Next build/tsc via pnpm action v2).
