@@ -30,7 +30,36 @@ lunasentri/
 
 ## 🚀 Getting Started
 
-This project is in early development. More documentation coming soon.
+See [docs/LOCAL_DEV.md](docs/LOCAL_DEV.md) for complete development setup instructions.
+
+### Quick Start
+
+1. **Clone and install dependencies**:
+   ```bash
+   git clone <repository-url>
+   cd lunasentri
+   pnpm install
+   ```
+
+2. **Configure environment** - Create `apps/web-next/.env.local`:
+   ```bash
+   NEXT_PUBLIC_API_URL=http://localhost:8080
+   ```
+
+3. **Start the backend** (Terminal 1):
+   ```bash
+   cd apps/api-go
+   go run main.go
+   ```
+
+4. **Start the frontend** (Terminal 2):
+   ```bash
+   pnpm dev:web
+   ```
+
+5. **Open** `http://localhost:3000` to see the live metrics dashboard
+
+For detailed setup, troubleshooting, and environment variable configuration, see [docs/LOCAL_DEV.md](docs/LOCAL_DEV.md).
 
 ## 📄 License
 
