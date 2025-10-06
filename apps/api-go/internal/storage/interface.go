@@ -47,6 +47,12 @@ type Store interface {
     // MarkPasswordResetUsed marks a password reset entry as used
     MarkPasswordResetUsed(ctx context.Context, id int) error
 
+    // ListUsers retrieves all users ordered by email
+    ListUsers(ctx context.Context) ([]User, error)
+
+    // DeleteUser deletes a user by ID
+    DeleteUser(ctx context.Context, id int) error
+
 	// Close closes the storage connection
 	Close() error
 }

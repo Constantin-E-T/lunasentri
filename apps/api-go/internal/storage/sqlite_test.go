@@ -391,3 +391,167 @@ func TestSQLiteStore_UpsertAdmin_UpdateExisting(t *testing.T) {
 		t.Errorf("Expected new password hash %s, got %s", newHash, retrievedUser.PasswordHash)
 	}
 }
+
+func TestSQLiteStore_ListUsers(t *testing.T) {
+	store, err := NewSQLiteStore("file::memory:?cache=shared")
+	if err != nil {
+		t.Fatalf("Failed to create test store: %v", err)
+	}
+	defer store.Close()
+
+	ctx := context.Background()
+
+	// Create multiple users
+	_, err = store.CreateUser(ctx, "charlie@example.com", "hash3")
+	if err != nil {
+		t.Fatalf("Failed to create user: %v", err)
+	}
+	_, err = store.CreateUser(ctx, "alice@example.com", "hash1")
+	if err != nil {
+		t.Fatalf("Failed to create user: %v", err)
+	}
+	_, err = store.CreateUser(ctx, "bob@example.com", "hash2")
+	if err != nil {
+		t.Fatalf("Failed to create user: %v", err)
+	}
+
+	// List all users
+	users, err := store.ListUsers(ctx)
+	if err != nil {
+		t.Fatalf("ListUsers failed: %v", err)
+	}
+
+	// Verify count
+	if len(users) != 3 {
+		t.Errorf("Expected 3 users, got %d", len(users))
+	}
+
+	// Verify ordering by email (alphabetical)
+	if users[0].Email != "alice@example.com" {
+		t.Errorf("Expected first user to be alice@example.com, got %s", users[0].Email)
+	}
+	if users[1].Email != "bob@example.com" {
+		t.Errorf("Expected second user to be bob@example.com, got %s", users[1].Email)
+	}
+	if users[2].Email != "charlie@example.com" {
+		t.Errorf("Expected third user to be charlie@example.com, got %s", users[2].Email)
+	}
+}
+
+func TestSQLiteStore_ListUsers_Empty(t *testing.T) {
+	store, err := NewSQLiteStore("file::memory:?cache=shared")
+	if err != nil {
+		t.Fatalf("Failed to create test store: %v", err)
+	}
+	defer store.Close()
+
+	ctx := context.Background()
+
+	// List users when none exist
+	users, err := store.ListUsers(ctx)
+	if err != nil {
+		t.Fatalf("ListUsers failed: %v", err)
+	}
+
+	// Verify empty list
+	if len(users) != 0 {
+		t.Errorf("Expected 0 users, got %d", len(users))
+	}
+}
+
+func TestSQLiteStore_DeleteUser(t *testing.T) {
+	store, err := NewSQLiteStore("file::memory:?cache=shared")
+	if err != nil {
+		t.Fatalf("Failed to create test store: %v", err)
+	}
+	defer store.Close()
+
+	ctx := context.Background()
+
+	// Create multiple users
+	user1, err := store.CreateUser(ctx, "user1@example.com", "hash1")
+	if err != nil {
+		t.Fatalf("Failed to create user1: %v", err)
+	}
+	user2, err := store.CreateUser(ctx, "user2@example.com", "hash2")
+	if err != nil {
+		t.Fatalf("Failed to create user2: %v", err)
+	}
+
+	// Delete user1
+	err = store.DeleteUser(ctx, user1.ID)
+	if err != nil {
+		t.Fatalf("DeleteUser failed: %v", err)
+	}
+
+	// Verify user1 is gone
+	_, err = store.GetUserByEmail(ctx, "user1@example.com")
+	if err != ErrUserNotFound {
+		t.Errorf("Expected ErrUserNotFound for deleted user, got: %v", err)
+	}
+
+	// Verify user2 still exists
+	retrievedUser, err := store.GetUserByEmail(ctx, "user2@example.com")
+	if err != nil {
+		t.Fatalf("Failed to get user2: %v", err)
+	}
+	if retrievedUser.ID != user2.ID {
+		t.Errorf("Expected user2 ID %d, got %d", user2.ID, retrievedUser.ID)
+	}
+}
+
+func TestSQLiteStore_DeleteUser_NotFound(t *testing.T) {
+	store, err := NewSQLiteStore("file::memory:?cache=shared")
+	if err != nil {
+		t.Fatalf("Failed to create test store: %v", err)
+	}
+	defer store.Close()
+
+	ctx := context.Background()
+
+	// Create a user so we have at least one
+	_, err = store.CreateUser(ctx, "user@example.com", "hash")
+	if err != nil {
+		t.Fatalf("Failed to create user: %v", err)
+	}
+
+	// Try to delete non-existent user
+	err = store.DeleteUser(ctx, 9999)
+	if err != ErrUserNotFound {
+		t.Errorf("Expected ErrUserNotFound, got: %v", err)
+	}
+}
+
+func TestSQLiteStore_DeleteUser_LastUser(t *testing.T) {
+	store, err := NewSQLiteStore("file::memory:?cache=shared")
+	if err != nil {
+		t.Fatalf("Failed to create test store: %v", err)
+	}
+	defer store.Close()
+
+	ctx := context.Background()
+
+	// Create only one user
+	user, err := store.CreateUser(ctx, "lastuser@example.com", "hash")
+	if err != nil {
+		t.Fatalf("Failed to create user: %v", err)
+	}
+
+	// Try to delete the last user (should fail)
+	err = store.DeleteUser(ctx, user.ID)
+	if err == nil {
+		t.Fatal("Expected error when deleting last user")
+	}
+	if err.Error() != "cannot delete the last user" {
+		t.Errorf("Expected 'cannot delete the last user' error, got: %v", err)
+	}
+
+	// Verify user still exists
+	users, err := store.ListUsers(ctx)
+	if err != nil {
+		t.Fatalf("Failed to list users: %v", err)
+	}
+	if len(users) != 1 {
+		t.Errorf("Expected 1 user to remain, got %d", len(users))
+	}
+}

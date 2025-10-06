@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 	"time"
 
@@ -58,8 +59,23 @@ type ResetPasswordRequest struct {
 
 // UserProfile represents the user profile response
 type UserProfile struct {
-	ID    int    `json:"id"`
-	Email string `json:"email"`
+	ID        int       `json:"id"`
+	Email     string    `json:"email"`
+	CreatedAt time.Time `json:"created_at"`
+}
+
+// CreateUserRequest represents the create user request body
+type CreateUserRequest struct {
+	Email    string `json:"email"`
+	Password string `json:"password,omitempty"`
+}
+
+// CreateUserResponse represents the create user response
+type CreateUserResponse struct {
+	ID           int       `json:"id"`
+	Email        string    `json:"email"`
+	CreatedAt    time.Time `json:"created_at"`
+	TempPassword string    `json:"temp_password,omitempty"`
 }
 
 // handleLogin handles POST /auth/login
@@ -97,8 +113,9 @@ func handleLogin(authService *auth.Service, accessTTL time.Duration, secureCooki
 		// Return user profile
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(UserProfile{
-			ID:    user.ID,
-			Email: user.Email,
+			ID:        user.ID,
+			Email:     user.Email,
+			CreatedAt: user.CreatedAt,
 		})
 	}
 }
@@ -137,8 +154,9 @@ func handleMe() http.HandlerFunc {
 		// Return user profile
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(UserProfile{
-			ID:    user.ID,
-			Email: user.Email,
+			ID:        user.ID,
+			Email:     user.Email,
+			CreatedAt: user.CreatedAt,
 		})
 	}
 }
@@ -196,6 +214,147 @@ func handleResetPassword(authService *auth.Service) http.HandlerFunc {
 		if err != nil {
 			log.Printf("Password reset failed: %v", err)
 			http.Error(w, "Invalid or expired reset token", http.StatusBadRequest)
+			return
+		}
+
+		// Return 204 No Content on success
+		w.WriteHeader(http.StatusNoContent)
+	}
+}
+
+// handleListUsers handles GET /auth/users
+func handleListUsers(authService *auth.Service) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodGet {
+			http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
+
+		// List all users
+		users, err := authService.ListUsers(r.Context())
+		if err != nil {
+			log.Printf("Failed to list users: %v", err)
+			http.Error(w, "Internal server error", http.StatusInternalServerError)
+			return
+		}
+
+		// Convert to UserProfile list
+		profiles := make([]UserProfile, len(users))
+		for i, user := range users {
+			profiles[i] = UserProfile{
+				ID:        user.ID,
+				Email:     user.Email,
+				CreatedAt: user.CreatedAt,
+			}
+		}
+
+		// Return user list
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(profiles)
+	}
+}
+
+// handleCreateUser handles POST /auth/users
+func handleCreateUser(authService *auth.Service) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
+
+		var req CreateUserRequest
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			http.Error(w, "Invalid request body", http.StatusBadRequest)
+			return
+		}
+
+		// Create the user
+		user, tempPassword, err := authService.CreateUser(r.Context(), req.Email, req.Password)
+		if err != nil {
+			log.Printf("Failed to create user: %v", err)
+
+			// Return appropriate status codes
+			if strings.Contains(err.Error(), "already exists") {
+				w.Header().Set("Content-Type", "application/json")
+				w.WriteHeader(http.StatusConflict)
+				json.NewEncoder(w).Encode(map[string]string{"error": err.Error()})
+				return
+			}
+			if strings.Contains(err.Error(), "invalid email") || strings.Contains(err.Error(), "cannot be empty") {
+				w.Header().Set("Content-Type", "application/json")
+				w.WriteHeader(http.StatusBadRequest)
+				json.NewEncoder(w).Encode(map[string]string{"error": err.Error()})
+				return
+			}
+
+			http.Error(w, "Internal server error", http.StatusInternalServerError)
+			return
+		}
+
+		// Return user with optional temp password
+		response := CreateUserResponse{
+			ID:           user.ID,
+			Email:        user.Email,
+			CreatedAt:    user.CreatedAt,
+			TempPassword: tempPassword,
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusCreated)
+		json.NewEncoder(w).Encode(response)
+	}
+}
+
+// handleDeleteUser handles DELETE /auth/users/{id}
+func handleDeleteUser(authService *auth.Service) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodDelete {
+			http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
+
+		// Extract user ID from URL path
+		path := strings.TrimPrefix(r.URL.Path, "/auth/users/")
+		if path == "" || path == r.URL.Path {
+			http.Error(w, "User ID required", http.StatusBadRequest)
+			return
+		}
+
+		// Parse user ID
+		var userID int
+		if _, err := fmt.Sscanf(path, "%d", &userID); err != nil {
+			http.Error(w, "Invalid user ID", http.StatusBadRequest)
+			return
+		}
+
+		// Get current user from context
+		currentUser, ok := auth.GetUserFromContext(r.Context())
+		if !ok {
+			http.Error(w, "Unauthorized", http.StatusUnauthorized)
+			return
+		}
+
+		// Delete the user
+		err := authService.DeleteUser(r.Context(), userID, currentUser.ID)
+		if err != nil {
+			log.Printf("Failed to delete user: %v", err)
+
+			// Return appropriate status codes
+			if strings.Contains(err.Error(), "cannot delete your own account") ||
+				strings.Contains(err.Error(), "cannot delete the last remaining user") {
+				w.Header().Set("Content-Type", "application/json")
+				w.WriteHeader(http.StatusForbidden)
+				json.NewEncoder(w).Encode(map[string]string{"error": err.Error()})
+				return
+			}
+			if strings.Contains(err.Error(), "user not found") {
+				w.Header().Set("Content-Type", "application/json")
+				w.WriteHeader(http.StatusNotFound)
+				json.NewEncoder(w).Encode(map[string]string{"error": err.Error()})
+				return
+			}
+
+			http.Error(w, "Internal server error", http.StatusInternalServerError)
 			return
 		}
 
@@ -313,6 +472,20 @@ func newServer(collector metrics.Collector, startTime time.Time, authService *au
 
 	// Protected auth endpoints
 	mux.Handle("/auth/me", authService.RequireAuth(handleMe()))
+
+	// User management endpoints (protected)
+	mux.Handle("/auth/users", authService.RequireAuth(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodGet {
+			handleListUsers(authService)(w, r)
+		} else if r.Method == http.MethodPost {
+			handleCreateUser(authService)(w, r)
+		} else {
+			http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		}
+	})))
+
+	// User delete endpoint (protected) - handle /auth/users/{id}
+	mux.Handle("/auth/users/", authService.RequireAuth(handleDeleteUser(authService)))
 
 	// Register protected handlers (require authentication)
 	mux.Handle("/metrics", authService.RequireAuth(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

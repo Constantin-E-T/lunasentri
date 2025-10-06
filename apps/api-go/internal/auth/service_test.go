@@ -2,6 +2,7 @@ package auth
 
 import (
 	"context"
+	"fmt"
 	"testing"
 	"time"
 
@@ -76,6 +77,30 @@ func (m *mockStore) GetPasswordResetByHash(ctx context.Context, tokenHash string
 
 func (m *mockStore) MarkPasswordResetUsed(ctx context.Context, id int) error {
 	return nil
+}
+
+func (m *mockStore) ListUsers(ctx context.Context) ([]storage.User, error) {
+	users := make([]storage.User, 0, len(m.users))
+	for _, user := range m.users {
+		users = append(users, *user)
+	}
+	return users, nil
+}
+
+func (m *mockStore) DeleteUser(ctx context.Context, id int) error {
+	// Count users first
+	if len(m.users) <= 1 {
+		return fmt.Errorf("cannot delete the last user")
+	}
+
+	// Find and delete user
+	for email, user := range m.users {
+		if user.ID == id {
+			delete(m.users, email)
+			return nil
+		}
+	}
+	return storage.ErrUserNotFound
 }
 
 func (m *mockStore) Close() error {

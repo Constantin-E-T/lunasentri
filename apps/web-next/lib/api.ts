@@ -8,6 +8,19 @@ export interface Metrics {
 export interface User {
   id: number;
   email: string;
+  created_at?: string;
+}
+
+export interface CreateUserRequest {
+  email: string;
+  password?: string;
+}
+
+export interface CreateUserResponse {
+  id: number;
+  email: string;
+  created_at: string;
+  temp_password?: string;
 }
 
 export interface LoginRequest {
@@ -78,4 +91,52 @@ export async function fetchCurrentUser(): Promise<User> {
   }
 
   return response.json();
+}
+
+export async function listUsers(): Promise<User[]> {
+  const response = await fetch(`${API_URL}/auth/users`, {
+    method: 'GET',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    credentials: 'include', // Include cookies for authentication
+  });
+
+  if (!response.ok) {
+    throw new Error(`Failed to fetch users: ${response.status} ${response.statusText}`);
+  }
+
+  return response.json();
+}
+
+export async function createUser(data: CreateUserRequest): Promise<CreateUserResponse> {
+  const response = await fetch(`${API_URL}/auth/users`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    credentials: 'include', // Include cookies for authentication
+    body: JSON.stringify(data),
+  });
+
+  if (!response.ok) {
+    const errorData = await response.json().catch(() => null);
+    const message = errorData?.error || `Failed to create user: ${response.status} ${response.statusText}`;
+    throw new Error(message);
+  }
+
+  return response.json();
+}
+
+export async function deleteUser(id: number): Promise<void> {
+  const response = await fetch(`${API_URL}/auth/users/${id}`, {
+    method: 'DELETE',
+    credentials: 'include', // Include cookies for authentication
+  });
+
+  if (!response.ok) {
+    const errorData = await response.json().catch(() => null);
+    const message = errorData?.error || `Failed to delete user: ${response.status} ${response.statusText}`;
+    throw new Error(message);
+  }
 }

@@ -2,6 +2,7 @@
 
 import { useEffect } from 'react';
 import { useRouter } from 'next/navigation';
+import Link from 'next/link';
 import { MetricsCard } from '@/components/MetricsCard';
 import { useSession } from '@/lib/useSession';
 
@@ -40,6 +41,12 @@ export default function Home() {
             <span className="text-white font-semibold">LunaSentri</span>
           </div>
           <div className="flex items-center gap-4">
+            <Link
+              href="/users"
+              className="text-sm text-slate-300 hover:text-white transition-colors"
+            >
+              Manage Users
+            </Link>
             <span className="text-sm text-slate-400">
               {user?.email}
             </span>

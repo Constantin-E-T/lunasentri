@@ -129,6 +129,19 @@ The web interface will be available at `http://localhost:3000`
 - Redirected to dashboard `/`
 - Logout button in header clears session
 
+**Manage Users**:
+- Click "Manage Users" link in dashboard header to access `/users` page
+- **List Users**: View all users with email and creation date
+- **Add User**:
+  - Enter email (required)
+  - Optionally enter password, or leave empty for auto-generated temp password
+  - If temp password is generated, it will be displayed once in a dismissible alert
+  - Share the temp password with the new user securely
+- **Delete User**:
+  - Click "Delete" button next to any user (except yourself)
+  - Confirm deletion in dialog
+  - Cannot delete your own account or the last remaining user
+
 **Troubleshooting Authentication**:
 
 - **"Invalid email or password"**: Check that `ADMIN_EMAIL` and `ADMIN_PASSWORD` match what you're entering
@@ -217,6 +230,9 @@ pnpm start
 #### Protected Endpoints (require authentication)
 
 - `GET /auth/me` - Get current user profile
+- `GET /auth/users` - List all users
+- `POST /auth/users` - Create a new user
+- `DELETE /auth/users/{id}` - Delete a user by ID
 - `GET /metrics` - System metrics (CPU, memory, disk, uptime)
 - `WebSocket /ws` - Real-time metrics streaming (sends JSON every ~3 seconds)
 
@@ -316,6 +332,58 @@ curl -X POST http://localhost:8080/auth/reset-password \
 - Endpoint doesn't reveal whether email exists (timing-safe)
 - Password must be at least 8 characters
 - Old password stops working immediately after reset
+
+#### User Management Endpoints
+
+**GET /auth/users**
+
+List all users. Requires authentication.
+
+```bash
+curl -b cookies.txt http://localhost:8080/auth/users
+
+# Response: [{"id":1,"email":"admin@example.com","created_at":"2024-01-01T12:00:00Z"},...]
+```
+
+**POST /auth/users**
+
+Create a new user. If password is not provided, a secure temporary password is generated and returned. Requires authentication.
+
+```bash
+# Create user with password
+curl -b cookies.txt -X POST http://localhost:8080/auth/users \
+  -H "Content-Type: application/json" \
+  -d '{"email":"newuser@example.com","password":"securepassword"}'
+
+# Response: {"id":2,"email":"newuser@example.com","created_at":"2024-01-01T12:00:00Z"}
+
+# Create user without password (temp password generated)
+curl -b cookies.txt -X POST http://localhost:8080/auth/users \
+  -H "Content-Type: application/json" \
+  -d '{"email":"tempuser@example.com"}'
+
+# Response: {"id":3,"email":"tempuser@example.com","created_at":"...","temp_password":"base64-encoded-password"}
+```
+
+**DELETE /auth/users/{id}**
+
+Delete a user by ID. Cannot delete yourself or the last remaining user. Requires authentication.
+
+```bash
+curl -b cookies.txt -X DELETE http://localhost:8080/auth/users/2
+
+# Response: 204 No Content (success)
+# Or 403 Forbidden (cannot delete self or last user)
+# Or 404 Not Found (user doesn't exist)
+```
+
+**User Management Notes:**
+- Initial admin user is created from `ADMIN_EMAIL` and `ADMIN_PASSWORD` environment variables
+- Additional users can be created via the API by any authenticated user
+- Users cannot delete their own account (prevents accidental lockout)
+- System prevents deletion of the last remaining user
+- Email format validation (must contain @)
+- Duplicate emails are rejected with 409 Conflict
 
 **Frontend Usage:**
 

@@ -308,6 +308,67 @@ func (s *SQLiteStore) MarkPasswordResetUsed(ctx context.Context, id int) error {
     return nil
 }
 
+// ListUsers retrieves all users ordered by email
+func (s *SQLiteStore) ListUsers(ctx context.Context) ([]User, error) {
+    query := `SELECT id, email, password_hash, created_at FROM users ORDER BY email ASC`
+
+    rows, err := s.db.QueryContext(ctx, query)
+    if err != nil {
+        return nil, fmt.Errorf("failed to list users: %w", err)
+    }
+    defer rows.Close()
+
+    var users []User
+    for rows.Next() {
+        var user User
+        err := rows.Scan(&user.ID, &user.Email, &user.PasswordHash, &user.CreatedAt)
+        if err != nil {
+            return nil, fmt.Errorf("failed to scan user: %w", err)
+        }
+        users = append(users, user)
+    }
+
+    if err = rows.Err(); err != nil {
+        return nil, fmt.Errorf("error iterating users: %w", err)
+    }
+
+    return users, nil
+}
+
+// DeleteUser deletes a user by ID
+func (s *SQLiteStore) DeleteUser(ctx context.Context, id int) error {
+    // First, check if the user exists
+    var exists bool
+    err := s.db.QueryRowContext(ctx, "SELECT EXISTS(SELECT 1 FROM users WHERE id = ?)", id).Scan(&exists)
+    if err != nil {
+        return fmt.Errorf("failed to check user existence: %w", err)
+    }
+
+    if !exists {
+        return ErrUserNotFound
+    }
+
+    // Check if this is the last user
+    var count int
+    err = s.db.QueryRowContext(ctx, "SELECT COUNT(*) FROM users").Scan(&count)
+    if err != nil {
+        return fmt.Errorf("failed to count users: %w", err)
+    }
+
+    if count <= 1 {
+        return fmt.Errorf("cannot delete the last user")
+    }
+
+    // Delete the user
+    query := `DELETE FROM users WHERE id = ?`
+    _, err = s.db.ExecContext(ctx, query, id)
+    if err != nil {
+        return fmt.Errorf("failed to delete user: %w", err)
+    }
+
+    return nil
+}
+
 // Close closes the database connection
 func (s *SQLiteStore) Close() error {
 	return s.db.Close()
