@@ -12,11 +12,111 @@ import (
 	"time"
 
 	"github.com/Constantin-E-T/lunasentri/apps/api-go/internal/metrics"
+	"github.com/gorilla/websocket"
 )
 
 var (
 	serverStartTime time.Time
+	upgrader        = websocket.Upgrader{
+		CheckOrigin: func(r *http.Request) bool {
+			// Get allowed origin from environment variable, default to localhost:3000
+			allowedOrigin := os.Getenv("CORS_ALLOWED_ORIGIN")
+			if allowedOrigin == "" {
+				allowedOrigin = "http://localhost:3000"
+			}
+			origin := r.Header.Get("Origin")
+			return origin == allowedOrigin
+		},
+		ReadBufferSize:  1024,
+		WriteBufferSize: 1024,
+	}
 )
+
+// handleWebSocket handles WebSocket connections for streaming metrics
+func handleWebSocket(collector metrics.Collector, startTime time.Time) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		// Upgrade HTTP to WebSocket
+		conn, err := upgrader.Upgrade(w, r, nil)
+		if err != nil {
+			log.Printf("WebSocket upgrade failed: %v", err)
+			return
+		}
+		defer func() {
+			conn.Close()
+			log.Printf("WebSocket client disconnected: %s", r.RemoteAddr)
+		}()
+
+		log.Printf("WebSocket client connected: %s", r.RemoteAddr)
+
+		// Set read/write deadlines
+		conn.SetReadDeadline(time.Now().Add(60 * time.Second))
+		conn.SetWriteDeadline(time.Now().Add(10 * time.Second))
+
+		// Set up ping/pong to detect disconnections
+		conn.SetPongHandler(func(string) error {
+			conn.SetReadDeadline(time.Now().Add(60 * time.Second))
+			return nil
+		})
+
+		// Create ticker for sending metrics every 3 seconds
+		ticker := time.NewTicker(3 * time.Second)
+		defer ticker.Stop()
+
+		// Channel to signal when to stop the connection
+		done := make(chan struct{})
+
+		// Start goroutine to handle client disconnection detection
+		go func() {
+			defer close(done)
+			for {
+				// Read messages from client (mainly for detecting disconnection)
+				_, _, err := conn.ReadMessage()
+				if err != nil {
+					if websocket.IsUnexpectedCloseError(err, websocket.CloseGoingAway, websocket.CloseAbnormalClosure) {
+						log.Printf("WebSocket error: %v", err)
+					}
+					return
+				}
+			}
+		}()
+
+		// Main loop for sending metrics
+		for {
+			select {
+			case <-done:
+				return
+			case <-ticker.C:
+				// Collect metrics
+				ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+				metricsData, err := collector.Snapshot(ctx)
+				cancel()
+
+				if err != nil {
+					log.Printf("Failed to collect metrics for WebSocket: %v", err)
+					metricsData = metrics.Metrics{}
+				}
+
+				// Set real uptime
+				metricsData.UptimeS = time.Since(startTime).Seconds()
+
+				// Set write deadline for this message
+				conn.SetWriteDeadline(time.Now().Add(10 * time.Second))
+
+				// Send metrics as JSON
+				if err := conn.WriteJSON(metricsData); err != nil {
+					log.Printf("Failed to send WebSocket message: %v", err)
+					return
+				}
+
+				// Send ping to keep connection alive
+				if err := conn.WriteMessage(websocket.PingMessage, nil); err != nil {
+					log.Printf("Failed to send ping: %v", err)
+					return
+				}
+			}
+		}
+	}
+}
 
 // newServer creates a new HTTP server with the given collector
 func newServer(collector metrics.Collector, startTime time.Time) *http.ServeMux {
@@ -55,6 +155,9 @@ func newServer(collector metrics.Collector, startTime time.Time) *http.ServeMux 
 			return
 		}
 	})
+
+	// WebSocket endpoint for streaming metrics
+	mux.HandleFunc("/ws", handleWebSocket(collector, startTime))
 
 	return mux
 }
@@ -107,7 +210,7 @@ func main() {
 		if allowedOrigin == "" {
 			allowedOrigin = "http://localhost:3000"
 		}
-		log.Printf("LunaSentri API starting on port %s (endpoints: /, /health, /metrics) with CORS origin: %s", port, allowedOrigin)
+		log.Printf("LunaSentri API starting on port %s (endpoints: /, /health, /metrics, /ws) with CORS origin: %s", port, allowedOrigin)
 		if err := server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 			log.Fatalf("Server failed to start: %v", err)
 		}

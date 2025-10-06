@@ -6,10 +6,13 @@ import (
 	"errors"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
+	"strings"
 	"testing"
 	"time"
 
 	"github.com/Constantin-E-T/lunasentri/apps/api-go/internal/metrics"
+	"github.com/gorilla/websocket"
 )
 
 // fakeCollector implements metrics.Collector for testing
@@ -249,4 +252,101 @@ func TestMetricsHandlerJSONStructure(t *testing.T) {
 	}
 
 	t.Logf("JSON structure test successful - all fields present: %v", requiredFields)
+}
+
+func TestWebSocketHandler(t *testing.T) {
+	// Setup fake collector with known values
+	startTime := time.Now().Add(-5 * time.Second) // 5 seconds ago
+	fakeMetrics := metrics.Metrics{
+		CPUPct:      25.5,
+		MemUsedPct:  55.0,
+		DiskUsedPct: 33.3,
+		UptimeS:     0, // Will be overwritten by handler
+	}
+	
+	collector := &fakeCollector{
+		metricsToReturn: fakeMetrics,
+		errToReturn:     nil,
+	}
+
+	// Create server with fake collector
+	mux := newServer(collector, startTime)
+	server := httptest.NewServer(corsMiddleware(mux))
+	defer server.Close()
+
+	// Convert HTTP URL to WebSocket URL
+	wsURL := "ws" + strings.TrimPrefix(server.URL, "http") + "/ws"
+	u, err := url.Parse(wsURL)
+	if err != nil {
+		t.Fatalf("Failed to parse WebSocket URL: %v", err)
+	}
+
+	// Set proper Origin header for CORS
+	headers := http.Header{}
+	headers.Set("Origin", "http://localhost:3000")
+
+	// Connect to WebSocket
+	conn, _, err := websocket.DefaultDialer.Dial(u.String(), headers)
+	if err != nil {
+		t.Fatalf("Failed to connect to WebSocket: %v", err)
+	}
+	defer conn.Close()
+
+	// Set read timeout
+	conn.SetReadDeadline(time.Now().Add(10 * time.Second))
+
+	// Read first message
+	var receivedMetrics metrics.Metrics
+	err = conn.ReadJSON(&receivedMetrics)
+	if err != nil {
+		t.Fatalf("Failed to read WebSocket message: %v", err)
+	}
+
+	// Verify metrics data
+	if receivedMetrics.CPUPct != fakeMetrics.CPUPct {
+		t.Errorf("Expected CPU %f, got %f", fakeMetrics.CPUPct, receivedMetrics.CPUPct)
+	}
+	if receivedMetrics.MemUsedPct != fakeMetrics.MemUsedPct {
+		t.Errorf("Expected Memory %f, got %f", fakeMetrics.MemUsedPct, receivedMetrics.MemUsedPct)
+	}
+	if receivedMetrics.DiskUsedPct != fakeMetrics.DiskUsedPct {
+		t.Errorf("Expected Disk %f, got %f", fakeMetrics.DiskUsedPct, receivedMetrics.DiskUsedPct)
+	}
+	if receivedMetrics.UptimeS <= 0 {
+		t.Errorf("Expected positive uptime, got %f", receivedMetrics.UptimeS)
+	}
+
+	t.Logf("WebSocket test successful - received metrics: %+v", receivedMetrics)
+}
+
+func TestWebSocketCORSValidation(t *testing.T) {
+	// Setup fake collector
+	startTime := time.Now()
+	collector := &fakeCollector{
+		metricsToReturn: metrics.Metrics{},
+		errToReturn:     nil,
+	}
+
+	// Create server
+	mux := newServer(collector, startTime)
+	server := httptest.NewServer(corsMiddleware(mux))
+	defer server.Close()
+
+	// Convert HTTP URL to WebSocket URL
+	wsURL := "ws" + strings.TrimPrefix(server.URL, "http") + "/ws"
+	u, err := url.Parse(wsURL)
+	if err != nil {
+		t.Fatalf("Failed to parse WebSocket URL: %v", err)
+	}
+
+	// Test with wrong Origin header (should fail)
+	headers := http.Header{}
+	headers.Set("Origin", "http://malicious-site.com")
+
+	_, _, err = websocket.DefaultDialer.Dial(u.String(), headers)
+	if err == nil {
+		t.Fatal("Expected WebSocket connection to fail with wrong Origin, but it succeeded")
+	}
+
+	t.Logf("CORS validation test successful - connection rejected for wrong origin")
 }

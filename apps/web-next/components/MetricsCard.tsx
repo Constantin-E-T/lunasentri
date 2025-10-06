@@ -1,9 +1,6 @@
-'use client';
+"use client";
 
-import { useEffect, useState } from 'react';
-import { fetchMetrics, type Metrics } from '@/lib/api';
-
-const POLL_INTERVAL_MS = 5000; // 5 seconds
+import { useMetrics } from "@/lib/useMetrics";
 
 function formatUptime(seconds: number): string {
   const days = Math.floor(seconds / 86400);
@@ -23,42 +20,47 @@ function formatUptime(seconds: number): string {
   return `${secs}s`;
 }
 
+function ConnectionStatus({
+  type,
+  lastUpdate,
+}: {
+  type: string;
+  lastUpdate: Date | null;
+}) {
+  const getStatusInfo = () => {
+    switch (type) {
+      case "websocket":
+        return {
+          icon: "🔗",
+          label: "Live (WebSocket)",
+          color: "text-green-400",
+        };
+      case "polling":
+        return { icon: "🔄", label: "Polling (5s)", color: "text-yellow-400" };
+      default:
+        return { icon: "⚠️", label: "Disconnected", color: "text-red-400" };
+    }
+  };
+
+  const { icon, label, color } = getStatusInfo();
+  const timeAgo = lastUpdate
+    ? `${Math.round((Date.now() - lastUpdate.getTime()) / 1000)}s ago`
+    : "Never";
+
+  return (
+    <div className="flex items-center justify-between text-xs">
+      <span className={`${color} flex items-center gap-1`}>
+        <span>{icon}</span>
+        <span>{label}</span>
+      </span>
+      <span className="text-slate-500">{timeAgo}</span>
+    </div>
+  );
+}
+
 export function MetricsCard() {
-  const [metrics, setMetrics] = useState<Metrics | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    let isMounted = true;
-    let timeoutId: NodeJS.Timeout;
-
-    const loadMetrics = async () => {
-      try {
-        const data = await fetchMetrics();
-        if (isMounted) {
-          setMetrics(data);
-          setError(null);
-          setLoading(false);
-        }
-      } catch (err) {
-        if (isMounted) {
-          setError(err instanceof Error ? err.message : 'Failed to load metrics');
-          setLoading(false);
-        }
-      } finally {
-        if (isMounted) {
-          timeoutId = setTimeout(loadMetrics, POLL_INTERVAL_MS);
-        }
-      }
-    };
-
-    loadMetrics();
-
-    return () => {
-      isMounted = false;
-      clearTimeout(timeoutId);
-    };
-  }, []);
+  const { metrics, error, loading, connectionType, lastUpdate, retry } =
+    useMetrics();
 
   if (loading) {
     return (
@@ -73,9 +75,15 @@ export function MetricsCard() {
   if (error) {
     return (
       <div className="bg-slate-700/50 backdrop-blur-sm rounded-lg p-6 max-w-md mx-auto border border-red-500/30">
-        <div className="text-center">
-          <p className="text-red-400 text-sm mb-2">⚠️ Error</p>
+        <div className="text-center space-y-3">
+          <p className="text-red-400 text-sm mb-2">⚠️ Connection Error</p>
           <p className="text-slate-400 text-xs">{error}</p>
+          <button
+            onClick={retry}
+            className="px-3 py-1 bg-red-600/20 hover:bg-red-600/30 border border-red-500/30 rounded text-red-400 text-xs transition-colors"
+          >
+            Retry Connection
+          </button>
         </div>
       </div>
     );
@@ -87,7 +95,15 @@ export function MetricsCard() {
 
   return (
     <div className="bg-slate-700/50 backdrop-blur-sm rounded-lg p-6 max-w-md mx-auto">
-      <h2 className="text-xl font-semibold text-white mb-4">Live Metrics</h2>
+      <div className="flex justify-between items-center mb-4">
+        <h2 className="text-xl font-semibold text-white">Live Metrics</h2>
+        {connectionType === "websocket" && (
+          <div
+            className="w-2 h-2 bg-green-400 rounded-full animate-pulse"
+            title="Live WebSocket connection"
+          />
+        )}
+      </div>
       <div className="space-y-4">
         <MetricRow label="CPU" value={metrics.cpu_pct} />
         <MetricRow label="Memory" value={metrics.mem_used_pct} />
@@ -95,12 +111,14 @@ export function MetricsCard() {
         <div className="pt-2 border-t border-slate-600">
           <div className="flex justify-between items-center">
             <span className="text-slate-400 text-sm">Uptime</span>
-            <span className="text-white font-medium">{formatUptime(metrics.uptime_s)}</span>
+            <span className="text-white font-medium">
+              {formatUptime(metrics.uptime_s)}
+            </span>
           </div>
         </div>
       </div>
-      <div className="mt-4 text-center">
-        <span className="text-xs text-slate-500">Updates every 5s</span>
+      <div className="mt-4 pt-3 border-t border-slate-600">
+        <ConnectionStatus type={connectionType} lastUpdate={lastUpdate} />
       </div>
     </div>
   );
@@ -113,9 +131,9 @@ interface MetricRowProps {
 
 function MetricRow({ label, value }: MetricRowProps) {
   const getColor = (val: number) => {
-    if (val >= 80) return 'bg-red-500';
-    if (val >= 60) return 'bg-yellow-500';
-    return 'bg-green-500';
+    if (val >= 80) return "bg-red-500";
+    if (val >= 60) return "bg-yellow-500";
+    return "bg-green-500";
   };
 
   return (

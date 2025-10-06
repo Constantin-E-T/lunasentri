@@ -49,8 +49,9 @@ go run main.go
 The API will be available at `http://localhost:8080` with CORS enabled for the frontend.
 
 Expected output:
+
 ```
-LunaSentri API starting on port 8080 (endpoints: /, /health, /metrics) with CORS origin: http://localhost:3000
+LunaSentri API starting on port 8080 (endpoints: /, /health, /metrics, /ws) with CORS origin: http://localhost:3000
 ```
 
 ### 4. Start Frontend (Terminal 2)
@@ -70,6 +71,7 @@ The web interface will be available at `http://localhost:3000`
 4. Metrics should auto-update every 5 seconds
 
 **Troubleshooting**: If you see a CORS error or the metrics card shows an error:
+
 - Ensure the Go backend is running on port 8080
 - Check that `.env.local` exists in `apps/web-next/` with the correct API URL
 - Verify the backend logs show CORS origin matching your frontend URL
@@ -136,6 +138,51 @@ pnpm start
 - `GET /` - API welcome message
 - `GET /health` - Health check endpoint (returns `{"status":"healthy"}`)
 - `GET /metrics` - System metrics (CPU, memory, disk, uptime)
+- `WebSocket /ws` - Real-time metrics streaming (sends JSON every ~3 seconds)
+
+#### WebSocket Usage
+
+The `/ws` endpoint provides real-time streaming of system metrics via WebSocket connection:
+
+```javascript
+// Connect to WebSocket (from frontend)
+const ws = new WebSocket('ws://localhost:8080/ws');
+
+ws.onmessage = (event) => {
+  const metrics = JSON.parse(event.data);
+  console.log('Received metrics:', metrics);
+  // Example: {"cpu_pct":15.2,"mem_used_pct":67.1,"disk_used_pct":23.4,"uptime_s":120.5}
+};
+
+ws.onopen = () => console.log('WebSocket connected');
+ws.onclose = () => console.log('WebSocket disconnected');
+ws.onerror = (error) => console.error('WebSocket error:', error);
+```
+
+**WebSocket Features:**
+
+- Sends metrics JSON every 3 seconds automatically
+- Validates Origin header against `CORS_ALLOWED_ORIGIN` (default: `http://localhost:3000`)
+- Graceful handling of client disconnections
+- Ping/pong frames for connection health
+- Read/write timeouts for robustness
+
+**Testing WebSocket:**
+
+```bash
+# Using websocat (install: brew install websocat)
+websocat ws://localhost:8080/ws --origin http://localhost:3000
+
+# Using wscat (install: npm install -g wscat)
+wscat -c ws://localhost:8080/ws --origin http://localhost:3000
+
+# Fallback with curl (HTTP upgrade)
+curl -i -N -H "Connection: Upgrade" -H "Upgrade: websocket" \
+     -H "Origin: http://localhost:3000" \
+     -H "Sec-WebSocket-Key: test" \
+     -H "Sec-WebSocket-Version: 13" \
+     http://localhost:8080/ws
+```
 
 ### Frontend (port 3000)
 
@@ -143,7 +190,7 @@ pnpm start
 
 ## Project Structure
 
-```
+```text
 lunasentri/
 ├── pnpm-workspace.yaml   # Workspace configuration
 ├── package.json          # Root package with workspace scripts

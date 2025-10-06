@@ -2,7 +2,10 @@ module github.com/Constantin-E-T/lunasentri/apps/api-go
 
 go 1.23.0
 
-require github.com/shirou/gopsutil/v4 v4.25.9
+require (
+	github.com/gorilla/websocket v1.5.3
+	github.com/shirou/gopsutil/v4 v4.25.9
+)
 
 require (
 	github.com/ebitengine/purego v0.9.0 // indirect
