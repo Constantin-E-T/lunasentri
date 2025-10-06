@@ -20,8 +20,8 @@ export default function Home() {
   // Show loading state while checking authentication
   if (status === "loading") {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-900 to-slate-800">
-        <div className="text-slate-400">Loading...</div>
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="text-muted-foreground animate-pulse">Loading...</div>
       </div>
     );
   }
@@ -32,33 +32,32 @@ export default function Home() {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-900 to-slate-800">
-      {/* Header with logout */}
-      <div className="border-b border-slate-700/50 bg-slate-800/30 backdrop-blur-sm">
-        <div className="max-w-7xl mx-auto px-4 py-4 flex justify-between items-center">
-          <div className="flex items-center gap-3">
+    <div className="min-h-screen">
+      <div className="border-b border-border/40 bg-card/40 backdrop-blur-xl">
+        <div className="max-w-6xl mx-auto px-6 py-4 flex flex-wrap gap-4 justify-between items-center">
+          <div className="flex items-center gap-3 text-primary">
             <span className="text-2xl">🌙</span>
-            <span className="text-white font-semibold">LunaSentri</span>
+            <span className="font-semibold tracking-wide">LunaSentri</span>
           </div>
-          <div className="flex items-center gap-4">
+          <div className="flex items-center gap-3 text-sm">
             {user?.is_admin && (
               <Link
                 href="/users"
-                className="text-sm text-slate-300 hover:text-white transition-colors"
+                className="rounded-full bg-card/40 border border-border/30 px-4 py-2 text-muted-foreground transition-all duration-200 hover:text-foreground hover:border-border"
               >
                 Manage Users
               </Link>
             )}
             <Link
               href="/settings"
-              className="text-sm text-slate-300 hover:text-white transition-colors"
+              className="rounded-full bg-card/40 border border-border/30 px-4 py-2 text-muted-foreground transition-all duration-200 hover:text-foreground hover:border-border"
             >
               Settings
             </Link>
-            <span className="text-sm text-slate-400">{user?.email}</span>
+            <span className="text-muted-foreground hidden sm:inline">{user?.email}</span>
             <button
               onClick={logout}
-              className="text-sm text-slate-300 hover:text-white bg-slate-700/50 hover:bg-slate-700 px-4 py-2 rounded-lg transition-colors"
+              className="rounded-full bg-accent/20 border border-accent/30 px-4 py-2 text-accent-foreground transition-all duration-200 hover:bg-accent/30 hover:-translate-y-0.5"
             >
               Logout
             </button>
@@ -66,13 +65,16 @@ export default function Home() {
         </div>
       </div>
 
-      {/* Dashboard Content */}
-      <div className="flex items-center justify-center min-h-[calc(100vh-73px)]">
-        <div className="text-center px-4">
-          <h1 className="text-6xl font-bold text-white mb-4">🌙 LunaSentri</h1>
-          <p className="text-xl text-slate-300 mb-8">
-            Lightweight Server Monitoring Dashboard
-          </p>
+      <div className="flex items-center justify-center min-h-[calc(100vh-82px)] px-4">
+        <div className="text-center space-y-6 max-w-3xl w-full">
+          <div className="space-y-2">
+            <h1 className="text-4xl sm:text-5xl font-semibold tracking-wide text-primary drop-shadow-xl">
+              Lunar System Pulse
+            </h1>
+            <p className="text-muted-foreground text-base sm:text-lg">
+              Real-time insight into your infrastructure health with a moonlit touch.
+            </p>
+          </div>
           <MetricsCard />
         </div>
       </div>
