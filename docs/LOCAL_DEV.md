@@ -109,18 +109,39 @@ pnpm dev:web
 
 The web interface will be available at `http://localhost:3000`
 
-### 5. Verify Setup
+### 5. Verify Setup and Login
 
 1. Open `http://localhost:3000` in your browser
-2. You should see the LunaSentri dashboard with a live metrics card
-3. The metrics card should display CPU, Memory, Disk percentages, and uptime
-4. Metrics should auto-update every 5 seconds
+2. You will be redirected to `http://localhost:3000/login`
+3. Login with the admin credentials you set via environment variables:
+   - Email: Value from `ADMIN_EMAIL`
+   - Password: Value from `ADMIN_PASSWORD`
+4. After successful login, you'll be redirected to the dashboard
+5. The metrics card should display CPU, Memory, Disk percentages, and uptime
+6. Metrics should auto-update in real-time via WebSocket or polling every 5 seconds
 
-**Troubleshooting**: If you see a CORS error or the metrics card shows an error:
+**Login Flow**:
+- First visit: → Redirected to `/login`
+- Enter credentials → Session cookie set
+- Redirected to dashboard `/`
+- Logout button in header clears session
 
-- Ensure the Go backend is running on port 8080
-- Check that `.env.local` exists in `apps/web-next/` with the correct API URL
-- Verify the backend logs show CORS origin matching your frontend URL
+**Troubleshooting Authentication**:
+
+- **"Invalid email or password"**: Check that `ADMIN_EMAIL` and `ADMIN_PASSWORD` match what you're entering
+- **Login succeeds but immediately redirects to login**:
+  - Ensure `SECURE_COOKIE=false` is set in backend environment variables
+  - Check browser DevTools → Application → Cookies to verify `lunasentri_session` cookie is set
+  - Verify both frontend and backend are running on `localhost` (not mixing `127.0.0.1` and `localhost`)
+- **Metrics show "Please log in"**: Session expired or invalid, logout and login again
+
+**Other Troubleshooting**:
+
+- **CORS errors**:
+  - Ensure the Go backend is running on port 8080
+  - Check that `.env.local` exists in `apps/web-next/` with the correct API URL
+  - Verify the backend logs show CORS origin matching your frontend URL
+- **WebSocket connection fails**: Normal fallback to polling will occur automatically
 
 ## Development Commands
 

@@ -189,7 +189,13 @@ export function useMetrics(options: UseMetricsOptions = {}): UseMetricsReturn {
             }
         } catch (err) {
             if (isMountedRef.current) {
-                setError(err instanceof Error ? err.message : 'Failed to load metrics');
+                // Check if it's a 401 authentication error
+                const errorMessage = err instanceof Error ? err.message : 'Failed to load metrics';
+                if (errorMessage.includes('401')) {
+                    setError('Please log in to view metrics');
+                } else {
+                    setError(errorMessage);
+                }
                 setLoading(false);
             }
         }
