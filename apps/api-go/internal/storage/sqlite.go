@@ -156,6 +156,27 @@ func (s *SQLiteStore) GetUserByEmail(ctx context.Context, email string) (*User, 
 	return user, nil
 }
 
+// GetUserByID retrieves a user by their ID
+func (s *SQLiteStore) GetUserByID(ctx context.Context, id int) (*User, error) {
+	query := `SELECT id, email, password_hash, created_at FROM users WHERE id = ?`
+
+	user := &User{}
+	err := s.db.QueryRowContext(ctx, query, id).Scan(
+		&user.ID,
+		&user.Email,
+		&user.PasswordHash,
+		&user.CreatedAt,
+	)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return nil, fmt.Errorf("user with id %d not found", id)
+		}
+		return nil, fmt.Errorf("failed to get user: %w", err)
+	}
+
+	return user, nil
+}
+
 // UpsertAdmin creates or updates an admin user with the given email and password hash
 func (s *SQLiteStore) UpsertAdmin(ctx context.Context, email, passwordHash string) (*User, error) {
 	// Try to get existing user first

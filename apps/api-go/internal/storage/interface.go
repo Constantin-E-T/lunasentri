@@ -2,7 +2,13 @@ package storage
 
 import (
 	"context"
+	"errors"
 	"time"
+)
+
+var (
+	// ErrUserNotFound is returned when a user is not found
+	ErrUserNotFound = errors.New("user not found")
 )
 
 // User represents a user in the system
@@ -20,6 +26,9 @@ type Store interface {
 
 	// GetUserByEmail retrieves a user by their email address
 	GetUserByEmail(ctx context.Context, email string) (*User, error)
+
+	// GetUserByID retrieves a user by their ID
+	GetUserByID(ctx context.Context, id int) (*User, error)
 
 	// UpsertAdmin creates or updates an admin user with the given email and password hash
 	UpsertAdmin(ctx context.Context, email, passwordHash string) (*User, error)

@@ -34,6 +34,99 @@ var (
 	}
 )
 
+// LoginRequest represents the login request body
+type LoginRequest struct {
+	Email    string `json:"email"`
+	Password string `json:"password"`
+}
+
+// UserProfile represents the user profile response
+type UserProfile struct {
+	ID    int    `json:"id"`
+	Email string `json:"email"`
+}
+
+// handleLogin handles POST /auth/login
+func handleLogin(authService *auth.Service, accessTTL time.Duration, secureCookie bool) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
+
+		var req LoginRequest
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			http.Error(w, "Invalid request body", http.StatusBadRequest)
+			return
+		}
+
+		// Authenticate user
+		user, err := authService.Authenticate(r.Context(), req.Email, req.Password)
+		if err != nil {
+			http.Error(w, "Invalid credentials", http.StatusUnauthorized)
+			return
+		}
+
+		// Create session token
+		token, err := authService.CreateSession(user.ID)
+		if err != nil {
+			log.Printf("Failed to create session: %v", err)
+			http.Error(w, "Internal server error", http.StatusInternalServerError)
+			return
+		}
+
+		// Set session cookie
+		auth.SetSessionCookie(w, token, int(accessTTL.Seconds()), secureCookie)
+
+		// Return user profile
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(UserProfile{
+			ID:    user.ID,
+			Email: user.Email,
+		})
+	}
+}
+
+// handleLogout handles POST /auth/logout
+func handleLogout(secureCookie bool) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
+
+		// Clear session cookie
+		auth.ClearSessionCookie(w, secureCookie)
+
+		// Return 204 No Content
+		w.WriteHeader(http.StatusNoContent)
+	}
+}
+
+// handleMe handles GET /auth/me
+func handleMe() http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodGet {
+			http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
+
+		// Get user from context (set by RequireAuth middleware)
+		user, ok := auth.GetUserFromContext(r.Context())
+		if !ok {
+			http.Error(w, "Unauthorized", http.StatusUnauthorized)
+			return
+		}
+
+		// Return user profile
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(UserProfile{
+			ID:    user.ID,
+			Email: user.Email,
+		})
+	}
+}
+
 // handleWebSocket handles WebSocket connections for streaming metrics
 func handleWebSocket(collector metrics.Collector, startTime time.Time) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
@@ -120,12 +213,12 @@ func handleWebSocket(collector metrics.Collector, startTime time.Time) http.Hand
 	}
 }
 
-// newServer creates a new HTTP server with the given collector
-func newServer(collector metrics.Collector, startTime time.Time) *http.ServeMux {
+// newServer creates a new HTTP server with the given collector and auth service
+func newServer(collector metrics.Collector, startTime time.Time, authService *auth.Service, accessTTL time.Duration, secureCookie bool) *http.ServeMux {
 	// Create a new ServeMux
 	mux := http.NewServeMux()
 
-	// Register handlers
+	// Register public handlers
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		fmt.Fprintf(w, "LunaSentri API - Coming Soon")
 	})
@@ -135,31 +228,37 @@ func newServer(collector metrics.Collector, startTime time.Time) *http.ServeMux 
 		fmt.Fprintf(w, `{"status":"healthy"}`)
 	})
 
-	mux.HandleFunc("/metrics", func(w http.ResponseWriter, r *http.Request) {
+	// Register auth handlers
+	mux.HandleFunc("/auth/login", handleLogin(authService, accessTTL, secureCookie))
+	mux.HandleFunc("/auth/logout", handleLogout(secureCookie))
+	mux.Handle("/auth/me", authService.RequireAuth(handleMe()))
+
+	// Register protected handlers (require authentication)
+	mux.Handle("/metrics", authService.RequireAuth(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
-		
+
 		// Collect real system metrics
 		ctx, cancel := context.WithTimeout(r.Context(), 3*time.Second)
 		defer cancel()
-		
+
 		metricsData, err := collector.Snapshot(ctx)
 		if err != nil {
 			log.Printf("Failed to collect metrics: %v", err)
 			// Return zeroed metrics on error
 			metricsData = metrics.Metrics{}
 		}
-		
+
 		// Set real uptime
 		metricsData.UptimeS = time.Since(startTime).Seconds()
-		
+
 		if err := json.NewEncoder(w).Encode(metricsData); err != nil {
 			http.Error(w, "Internal Server Error", http.StatusInternalServerError)
 			return
 		}
-	})
+	})))
 
-	// WebSocket endpoint for streaming metrics
-	mux.HandleFunc("/ws", handleWebSocket(collector, startTime))
+	// WebSocket endpoint for streaming metrics (protected)
+	mux.Handle("/ws", authService.RequireAuth(handleWebSocket(collector, startTime)))
 
 	return mux
 }
@@ -177,6 +276,7 @@ func corsMiddleware(next http.Handler) http.Handler {
 		w.Header().Set("Access-Control-Allow-Origin", allowedOrigin)
 		w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
 		w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization, X-Requested-With")
+		w.Header().Set("Access-Control-Allow-Credentials", "true")
 
 		// Handle preflight OPTIONS requests
 		if r.Method == "OPTIONS" {
@@ -219,11 +319,42 @@ func main() {
 		log.Fatalf("Failed to bootstrap admin user: %v", err)
 	}
 
+	// Get JWT secret from environment variable (required)
+	jwtSecret := os.Getenv("AUTH_JWT_SECRET")
+	if jwtSecret == "" {
+		log.Fatal("AUTH_JWT_SECRET environment variable is required")
+	}
+
+	// Get access token TTL from environment variable, default to 15 minutes
+	accessTTL := 15 * time.Minute
+	if ttlStr := os.Getenv("ACCESS_TOKEN_TTL"); ttlStr != "" {
+		if parsedTTL, err := time.ParseDuration(ttlStr); err == nil {
+			accessTTL = parsedTTL
+		} else {
+			log.Printf("Warning: Invalid ACCESS_TOKEN_TTL value '%s', using default 15m", ttlStr)
+		}
+	}
+
+	// Initialize auth service
+	authService, err := auth.NewService(store, jwtSecret, accessTTL)
+	if err != nil {
+		log.Fatalf("Failed to initialize auth service: %v", err)
+	}
+
+	log.Printf("Auth service initialized (access token TTL: %v)", accessTTL)
+
+	// Get secure cookie setting from environment variable, default to true for production
+	secureCookie := true
+	if secureCookieEnv := os.Getenv("SECURE_COOKIE"); secureCookieEnv == "false" {
+		secureCookie = false
+		log.Println("Warning: Secure cookie flag disabled - only use in development")
+	}
+
 	// Initialize metrics collector
 	metricsCollector := metrics.NewSystemCollector()
 
-	// Create server with real collector
-	mux := newServer(metricsCollector, serverStartTime)
+	// Create server with real collector and auth service
+	mux := newServer(metricsCollector, serverStartTime, authService, accessTTL, secureCookie)
 
 	// Create HTTP server with CORS middleware
 	port := "8080"

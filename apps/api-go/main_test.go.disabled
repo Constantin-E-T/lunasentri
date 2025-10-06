@@ -11,7 +11,9 @@ import (
 	"testing"
 	"time"
 
+	"github.com/Constantin-E-T/lunasentri/apps/api-go/internal/auth"
 	"github.com/Constantin-E-T/lunasentri/apps/api-go/internal/metrics"
+	"github.com/Constantin-E-T/lunasentri/apps/api-go/internal/storage"
 	"github.com/gorilla/websocket"
 )
 
@@ -25,6 +27,23 @@ func (f *fakeCollector) Snapshot(ctx context.Context) (metrics.Metrics, error) {
 	return f.metricsToReturn, f.errToReturn
 }
 
+// createTestAuthService creates an auth service for testing (without actual auth checks for these tests)
+func createTestAuthService(t *testing.T) *auth.Service {
+	// Create in-memory SQLite store
+	store, err := storage.NewSQLiteStore("file::memory:?cache=shared")
+	if err != nil {
+		t.Fatalf("Failed to create test store: %v", err)
+	}
+
+	// Create auth service with test secret
+	authService, err := auth.NewService(store, "test-secret-key-for-testing", 15*time.Minute)
+	if err != nil {
+		t.Fatalf("Failed to create test auth service: %v", err)
+	}
+
+	return authService
+}
+
 func TestMetricsHandlerIntegration(t *testing.T) {
 	// Setup fake collector with known values
 	startTime := time.Now().Add(-10 * time.Second) // 10 seconds ago
@@ -34,14 +53,15 @@ func TestMetricsHandlerIntegration(t *testing.T) {
 		DiskUsedPct: 23.8,
 		UptimeS:     0, // Will be overwritten by handler
 	}
-	
+
 	collector := &fakeCollector{
 		metricsToReturn: fakeMetrics,
 		errToReturn:     nil,
 	}
 
-	// Create server with fake collector
-	mux := newServer(collector, startTime)
+	// Create auth service and server
+	authService := createTestAuthService(t)
+	mux := newServer(collector, startTime, authService, 15*time.Minute)
 	server := httptest.NewServer(corsMiddleware(mux))
 	defer server.Close()
 
@@ -114,7 +134,8 @@ func TestMetricsHandlerWithCollectorError(t *testing.T) {
 	}
 
 	// Create server with failing collector
-	mux := newServer(collector, startTime)
+	authService := createTestAuthService(t)
+	mux := newServer(collector, startTime, authService, 15*time.Minute)
 	server := httptest.NewServer(corsMiddleware(mux))
 	defer server.Close()
 
@@ -168,7 +189,8 @@ func TestMetricsHandlerConcurrentRequests(t *testing.T) {
 	}
 
 	// Create server
-	mux := newServer(collector, startTime)
+	authService := createTestAuthService(t)
+	mux := newServer(collector, startTime, authService, 15*time.Minute)
 	server := httptest.NewServer(corsMiddleware(mux))
 	defer server.Close()
 
@@ -222,7 +244,8 @@ func TestMetricsHandlerJSONStructure(t *testing.T) {
 		errToReturn: nil,
 	}
 
-	mux := newServer(collector, startTime)
+	authService := createTestAuthService(t)
+	mux := newServer(collector, startTime, authService, 15*time.Minute)
 	server := httptest.NewServer(corsMiddleware(mux))
 	defer server.Close()
 
@@ -270,7 +293,8 @@ func TestWebSocketHandler(t *testing.T) {
 	}
 
 	// Create server with fake collector
-	mux := newServer(collector, startTime)
+	authService := createTestAuthService(t)
+	mux := newServer(collector, startTime, authService, 15*time.Minute)
 	server := httptest.NewServer(corsMiddleware(mux))
 	defer server.Close()
 
@@ -328,7 +352,8 @@ func TestWebSocketCORSValidation(t *testing.T) {
 	}
 
 	// Create server
-	mux := newServer(collector, startTime)
+	authService := createTestAuthService(t)
+	mux := newServer(collector, startTime, authService, 15*time.Minute)
 	server := httptest.NewServer(corsMiddleware(mux))
 	defer server.Close()
 

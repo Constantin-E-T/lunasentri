@@ -28,11 +28,20 @@ NEXT_PUBLIC_API_URL=http://localhost:8080
 
 This tells the Next.js frontend where to find the Go API. The `NEXT_PUBLIC_` prefix makes the variable available to the browser.
 
-#### Backend (apps/api-go) - Optional
+#### Backend (apps/api-go)
 
-The backend supports CORS configuration, database path, and admin user bootstrapping via environment variables:
+The backend requires authentication configuration and supports optional CORS, database path, and admin user bootstrapping:
 
 ```bash
+# Required: JWT secret for session token signing
+export AUTH_JWT_SECRET=your-secret-key-min-32-chars-recommended
+
+# Optional: Disable secure cookie for local development (default: true)
+export SECURE_COOKIE=false
+
+# Optional: Access token time-to-live (default: 15m)
+export ACCESS_TOKEN_TTL=15m
+
 # Optional: Set allowed CORS origin (defaults to http://localhost:3000)
 export CORS_ALLOWED_ORIGIN=http://localhost:3000
 
@@ -44,6 +53,18 @@ export ADMIN_EMAIL=admin@yourdomain.com
 export ADMIN_PASSWORD=your_secure_password
 ```
 
+**Authentication Configuration:**
+
+- `AUTH_JWT_SECRET` is **required** - the server will not start without it
+- Use a strong random string (32+ characters recommended)
+- Generate with: `openssl rand -base64 32` or `python3 -c "import secrets; print(secrets.token_urlsafe(32))"`
+- `SECURE_COOKIE=false` is **required for local development over HTTP** - allows cookies to work on `localhost`
+  - Default is `true` (production mode - requires HTTPS)
+  - Set to `false` in development to enable login over `http://localhost`
+  - **Warning**: Never set to `false` in production - cookies would be vulnerable to interception
+- `ACCESS_TOKEN_TTL` accepts Go duration format: `15m`, `1h`, `24h`, etc.
+- Session cookies are HttpOnly and SameSite=Lax for security
+
 **Admin User Bootstrapping Notes:**
 
 - If both `ADMIN_EMAIL` and `ADMIN_PASSWORD` are set, an admin user will be created or updated on startup
@@ -51,6 +72,15 @@ export ADMIN_PASSWORD=your_secure_password
 - The password is hashed with bcrypt (cost 12) before storage
 - **Security**: Use strong passwords and consider rotating credentials after initial setup
 - **Never log**: Raw passwords are never logged; only email and user ID are logged
+
+**Authentication Flow:**
+
+1. Set `ADMIN_EMAIL` and `ADMIN_PASSWORD` environment variables
+2. Start the backend - admin user will be created automatically
+3. Login via `POST /auth/login` with your credentials
+4. Session cookie (`lunasentri_session`) will be set automatically
+5. Frontend must use `credentials: 'include'` in fetch calls to send cookies
+6. Protected endpoints (`/metrics`, `/ws`, `/auth/me`) require valid session
 
 If not set, the Go API defaults to allowing requests from `http://localhost:3000` and stores the SQLite database at `./data/lunasentri.db`.
 
@@ -151,17 +181,86 @@ pnpm start
 
 ### Backend (port 8080)
 
+#### Public Endpoints
+
 - `GET /` - API welcome message
 - `GET /health` - Health check endpoint (returns `{"status":"healthy"}`)
+- `POST /auth/login` - Login with credentials (sets session cookie)
+- `POST /auth/logout` - Logout (clears session cookie)
+
+#### Protected Endpoints (require authentication)
+
+- `GET /auth/me` - Get current user profile
 - `GET /metrics` - System metrics (CPU, memory, disk, uptime)
 - `WebSocket /ws` - Real-time metrics streaming (sends JSON every ~3 seconds)
 
+#### Authentication Endpoints
+
+**POST /auth/login**
+
+Login with email and password. Returns user profile and sets HttpOnly session cookie.
+
+```bash
+curl -X POST http://localhost:8080/auth/login \
+  -H "Content-Type: application/json" \
+  -d '{"email":"admin@yourdomain.com","password":"your_secure_password"}' \
+  -c cookies.txt
+
+# Response: {"id":1,"email":"admin@yourdomain.com"}
+```
+
+**POST /auth/logout**
+
+Clears the session cookie.
+
+```bash
+curl -X POST http://localhost:8080/auth/logout \
+  -b cookies.txt
+
+# Response: 204 No Content
+```
+
+**GET /auth/me**
+
+Get current authenticated user's profile. Requires valid session cookie.
+
+```bash
+curl http://localhost:8080/auth/me \
+  -b cookies.txt
+
+# Response: {"id":1,"email":"admin@yourdomain.com"}
+```
+
+**Frontend Usage:**
+
+```javascript
+// Login
+const response = await fetch('http://localhost:8080/auth/login', {
+  method: 'POST',
+  headers: { 'Content-Type': 'application/json' },
+  credentials: 'include', // Important: sends cookies
+  body: JSON.stringify({ email, password })
+});
+
+// Access protected endpoint
+const metrics = await fetch('http://localhost:8080/metrics', {
+  credentials: 'include' // Important: sends cookies
+});
+
+// Logout
+await fetch('http://localhost:8080/auth/logout', {
+  method: 'POST',
+  credentials: 'include'
+});
+```
+
 #### WebSocket Usage
 
-The `/ws` endpoint provides real-time streaming of system metrics via WebSocket connection:
+The `/ws` endpoint provides real-time streaming of system metrics via WebSocket connection. **Authentication required**.
 
 ```javascript
 // Connect to WebSocket (from frontend)
+// Note: Session cookie must be set (login first)
 const ws = new WebSocket('ws://localhost:8080/ws');
 
 ws.onmessage = (event) => {
@@ -179,25 +278,26 @@ ws.onerror = (error) => console.error('WebSocket error:', error);
 
 - Sends metrics JSON every 3 seconds automatically
 - Validates Origin header against `CORS_ALLOWED_ORIGIN` (default: `http://localhost:3000`)
+- **Requires valid session cookie** - validates authentication during upgrade
 - Graceful handling of client disconnections
 - Ping/pong frames for connection health
 - Read/write timeouts for robustness
 
-**Testing WebSocket:**
+**Testing WebSocket (with authentication):**
 
 ```bash
+# First login to get session cookie
+curl -X POST http://localhost:8080/auth/login \
+  -H "Content-Type: application/json" \
+  -d '{"email":"admin@yourdomain.com","password":"your_secure_password"}' \
+  -c cookies.txt
+
 # Using websocat (install: brew install websocat)
+# Note: WebSocket auth requires special handling - use frontend or authenticated tool
 websocat ws://localhost:8080/ws --origin http://localhost:3000
 
 # Using wscat (install: npm install -g wscat)
 wscat -c ws://localhost:8080/ws --origin http://localhost:3000
-
-# Fallback with curl (HTTP upgrade)
-curl -i -N -H "Connection: Upgrade" -H "Upgrade: websocket" \
-     -H "Origin: http://localhost:3000" \
-     -H "Sec-WebSocket-Key: test" \
-     -H "Sec-WebSocket-Version: 13" \
-     http://localhost:8080/ws
 ```
 
 ### Frontend (port 3000)
@@ -253,14 +353,24 @@ docker run -p 3000:3000 lunasentri-web
 
 **Note**: The `.env.local` file is gitignored. You must create it manually on each development machine.
 
-### Backend (Optional Environment Variables)
+### Backend Environment Variables
 
 | Variable | Required | Default | Description |
 |----------|----------|---------|-------------|
+| `AUTH_JWT_SECRET` | **Yes** | - | Secret key for JWT token signing (32+ characters recommended) |
+| `SECURE_COOKIE` | **Yes for dev** | `true` | Set to `false` for local HTTP development, `true` for production HTTPS |
+| `ACCESS_TOKEN_TTL` | No | `15m` | Session token lifetime (Go duration format: `15m`, `1h`, `24h`) |
 | `CORS_ALLOWED_ORIGIN` | No | `http://localhost:3000` | Allowed CORS origin for API requests |
 | `DB_PATH` | No | `./data/lunasentri.db` | Path to SQLite database file (directory will be created if needed) |
 | `ADMIN_EMAIL` | No | - | Admin user email for bootstrap (requires `ADMIN_PASSWORD`) |
 | `ADMIN_PASSWORD` | No | - | Admin user password for bootstrap (requires `ADMIN_EMAIL`) |
+
+**Authentication Configuration:**
+
+- `AUTH_JWT_SECRET` is **required** - server will not start without it
+- Generate strong secret: `openssl rand -base64 32`
+- `SECURE_COOKIE=false` is **required for localhost** - browsers reject secure cookies over HTTP
+- Session cookies are HttpOnly and SameSite=Lax
 
 **Admin Bootstrap Notes:**
 
