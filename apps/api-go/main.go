@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"log"
 	"net/http"
@@ -11,7 +12,20 @@ import (
 	"time"
 )
 
+// Metrics represents the system metrics response
+type Metrics struct {
+	CPUPct      float64 `json:"cpu_pct"`
+	MemUsedPct  float64 `json:"mem_used_pct"`
+	DiskUsedPct float64 `json:"disk_used_pct"`
+	UptimeS     float64 `json:"uptime_s"`
+}
+
+var serverStartTime time.Time
+
 func main() {
+	// Record server start time for uptime calculation
+	serverStartTime = time.Now()
+
 	// Create a new ServeMux
 	mux := http.NewServeMux()
 
@@ -25,6 +39,26 @@ func main() {
 		fmt.Fprintf(w, `{"status":"healthy"}`)
 	})
 
+	mux.HandleFunc("/metrics", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		
+		// Calculate real uptime in seconds
+		uptime := time.Since(serverStartTime).Seconds()
+		
+		// TODO: Replace placeholder values with real system metrics
+		metrics := Metrics{
+			CPUPct:      45.2,  // Placeholder value
+			MemUsedPct:  67.8,  // Placeholder value
+			DiskUsedPct: 23.5,  // Placeholder value
+			UptimeS:     uptime, // Real uptime since server start
+		}
+		
+		if err := json.NewEncoder(w).Encode(metrics); err != nil {
+			http.Error(w, "Internal Server Error", http.StatusInternalServerError)
+			return
+		}
+	})
+
 	// Create HTTP server
 	port := "8080"
 	server := &http.Server{
@@ -34,7 +68,7 @@ func main() {
 
 	// Start server in a goroutine
 	go func() {
-		log.Printf("LunaSentri API starting on port %s...", port)
+		log.Printf("LunaSentri API starting on port %s (endpoints: /, /health, /metrics)...", port)
 		if err := server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 			log.Fatalf("Server failed to start: %v", err)
 		}

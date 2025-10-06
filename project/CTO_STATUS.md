@@ -15,3 +15,4 @@
 
 ## Update Log
 - 2025-10-06: Initialized CTO status log and captured baseline role + knowledge from Constantin's instructions.
+- 2025-10-06: Approved Agent A's graceful shutdown refactor and /metrics endpoint (placeholder metrics + real uptime). Next focus: design system metrics collector + begin frontend surface.
