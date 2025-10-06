@@ -216,7 +216,7 @@ func TestDeleteUser_Success(t *testing.T) {
 
 	ctx := context.Background()
 
-	// Create two users
+	// Create two users (user1 will be admin as first user)
 	user1, _, err := service.CreateUser(ctx, "user1@example.com", "password1")
 	if err != nil {
 		t.Fatalf("Failed to create user1: %v", err)
@@ -226,13 +226,13 @@ func TestDeleteUser_Success(t *testing.T) {
 		t.Fatalf("Failed to create user2: %v", err)
 	}
 
-	// Delete user1 as user2
-	err = service.DeleteUser(ctx, user1.ID, user2.ID)
+	// Delete user2 (non-admin) as user1 (admin)
+	err = service.DeleteUser(ctx, user2.ID, user1.ID)
 	if err != nil {
 		t.Fatalf("DeleteUser failed: %v", err)
 	}
 
-	// Verify user1 is gone
+	// Verify user2 is gone
 	users, err := service.ListUsers(ctx)
 	if err != nil {
 		t.Fatalf("ListUsers failed: %v", err)
@@ -240,8 +240,8 @@ func TestDeleteUser_Success(t *testing.T) {
 	if len(users) != 1 {
 		t.Errorf("Expected 1 user remaining, got %d", len(users))
 	}
-	if users[0].ID != user2.ID {
-		t.Errorf("Expected user2 to remain, got user ID %d", users[0].ID)
+	if users[0].ID != user1.ID {
+		t.Errorf("Expected user1 to remain, got user ID %d", users[0].ID)
 	}
 }
 
@@ -281,47 +281,8 @@ func TestDeleteUser_CannotDeleteSelf(t *testing.T) {
 	}
 }
 
-func TestDeleteUser_CannotDeleteLastUser(t *testing.T) {
-	store, err := storage.NewSQLiteStore("file::memory:?cache=shared")
-	if err != nil {
-		t.Fatalf("Failed to create test store: %v", err)
-	}
-	defer store.Close()
-
-	service, err := NewService(store, "test-secret", 15*time.Minute)
-	if err != nil {
-		t.Fatalf("Failed to create service: %v", err)
-	}
-
-	ctx := context.Background()
-
-	// Create only one user
-	user, _, err := service.CreateUser(ctx, "lastuser@example.com", "password")
-	if err != nil {
-		t.Fatalf("Failed to create user: %v", err)
-	}
-
-	// Create second user to act as admin
-	admin, _, err := service.CreateUser(ctx, "admin@example.com", "password")
-	if err != nil {
-		t.Fatalf("Failed to create admin: %v", err)
-	}
-
-	// Delete the first user (now admin is last)
-	err = service.DeleteUser(ctx, user.ID, admin.ID)
-	if err != nil {
-		t.Fatalf("Failed to delete user: %v", err)
-	}
-
-	// Try to delete the last remaining user
-	err = service.DeleteUser(ctx, admin.ID, 999) // Use different current user ID to bypass self-check
-	if err == nil {
-		t.Fatal("Expected error when deleting last user")
-	}
-	if !strings.Contains(err.Error(), "cannot delete the last remaining user") {
-		t.Errorf("Expected 'cannot delete the last remaining user' error, got: %v", err)
-	}
-}
+// Note: The TestDeleteUser_CannotDeleteLastAdmin test is defined below
+// and covers the scenario of preventing last admin deletion
 
 func TestDeleteUser_NotFound(t *testing.T) {
 	store, err := storage.NewSQLiteStore("file::memory:?cache=shared")
@@ -377,5 +338,349 @@ func TestGenerateTempPassword(t *testing.T) {
 			t.Errorf("Generated duplicate password: %s", password)
 		}
 		passwords[password] = true
+	}
+}
+
+func TestCreateUser_FirstUserIsAdmin(t *testing.T) {
+	store, err := storage.NewSQLiteStore("file::memory:?cache=shared")
+	if err != nil {
+		t.Fatalf("Failed to create test store: %v", err)
+	}
+	defer store.Close()
+
+	service, err := NewService(store, "test-secret", 15*time.Minute)
+	if err != nil {
+		t.Fatalf("Failed to create service: %v", err)
+	}
+
+	ctx := context.Background()
+
+	// Create first user
+	firstUser, _, err := service.CreateUser(ctx, "first@example.com", "password")
+	if err != nil {
+		t.Fatalf("CreateUser failed: %v", err)
+	}
+
+	// Verify first user is admin
+	if !firstUser.IsAdmin {
+		t.Error("Expected first user to be admin")
+	}
+
+	// Create second user
+	secondUser, _, err := service.CreateUser(ctx, "second@example.com", "password")
+	if err != nil {
+		t.Fatalf("CreateUser failed for second user: %v", err)
+	}
+
+	// Verify second user is not admin
+	if secondUser.IsAdmin {
+		t.Error("Expected second user to not be admin")
+	}
+}
+
+func TestDeleteUser_CannotDeleteLastAdmin(t *testing.T) {
+	store, err := storage.NewSQLiteStore("file::memory:?cache=shared")
+	if err != nil {
+		t.Fatalf("Failed to create test store: %v", err)
+	}
+	defer store.Close()
+
+	service, err := NewService(store, "test-secret", 15*time.Minute)
+	if err != nil {
+		t.Fatalf("Failed to create service: %v", err)
+	}
+
+	ctx := context.Background()
+
+	// Create admin user (first user)
+	admin, _, err := service.CreateUser(ctx, "admin@example.com", "password")
+	if err != nil {
+		t.Fatalf("Failed to create admin: %v", err)
+	}
+
+	// Verify admin is actually admin
+	if !admin.IsAdmin {
+		t.Fatal("Expected first user to be admin")
+	}
+
+	// Create regular user (second user)
+	regularUser, _, err := service.CreateUser(ctx, "user@example.com", "password")
+	if err != nil {
+		t.Fatalf("Failed to create regular user: %v", err)
+	}
+
+	// Try to delete the only admin as regular user
+	err = service.DeleteUser(ctx, admin.ID, regularUser.ID)
+	if err == nil {
+		t.Fatal("Expected error when deleting last admin")
+	}
+	if !strings.Contains(err.Error(), "cannot delete the last admin") {
+		t.Errorf("Expected 'cannot delete the last admin' error, got: %v", err)
+	}
+
+	// Verify admin still exists
+	users, err := service.ListUsers(ctx)
+	if err != nil {
+		t.Fatalf("ListUsers failed: %v", err)
+	}
+	if len(users) != 2 {
+		t.Errorf("Expected 2 users, got %d", len(users))
+	}
+}
+
+func TestDeleteUser_CanDeleteAdminWithMultipleAdmins(t *testing.T) {
+	store, err := storage.NewSQLiteStore("file::memory:?cache=shared")
+	if err != nil {
+		t.Fatalf("Failed to create test store: %v", err)
+	}
+	defer store.Close()
+
+	service, err := NewService(store, "test-secret", 15*time.Minute)
+	if err != nil {
+		t.Fatalf("Failed to create service: %v", err)
+	}
+
+	ctx := context.Background()
+
+	// Create first admin
+	admin1, _, err := service.CreateUser(ctx, "admin1@example.com", "password")
+	if err != nil {
+		t.Fatalf("Failed to create admin1: %v", err)
+	}
+
+	// Create second user and promote to admin
+	admin2, _, err := service.CreateUser(ctx, "admin2@example.com", "password")
+	if err != nil {
+		t.Fatalf("Failed to create admin2: %v", err)
+	}
+	err = store.PromoteToAdmin(ctx, admin2.ID)
+	if err != nil {
+		t.Fatalf("Failed to promote admin2: %v", err)
+	}
+
+	// Delete first admin (should succeed since there's another admin)
+	err = service.DeleteUser(ctx, admin1.ID, admin2.ID)
+	if err != nil {
+		t.Fatalf("Should be able to delete admin when another admin exists: %v", err)
+	}
+
+	// Verify admin1 is gone
+	users, err := service.ListUsers(ctx)
+	if err != nil {
+		t.Fatalf("ListUsers failed: %v", err)
+	}
+	if len(users) != 1 {
+		t.Errorf("Expected 1 user remaining, got %d", len(users))
+	}
+	if users[0].ID != admin2.ID {
+		t.Error("Expected admin2 to remain")
+	}
+}
+
+func TestChangePassword_Success(t *testing.T) {
+	store, err := storage.NewSQLiteStore("file::memory:?cache=shared")
+	if err != nil {
+		t.Fatalf("Failed to create test store: %v", err)
+	}
+	defer store.Close()
+
+	service, err := NewService(store, "test-secret", 15*time.Minute)
+	if err != nil {
+		t.Fatalf("Failed to create service: %v", err)
+	}
+
+	ctx := context.Background()
+
+	// Create a user
+	currentPassword := "oldpassword123"
+	user, _, err := service.CreateUser(ctx, "user@example.com", currentPassword)
+	if err != nil {
+		t.Fatalf("Failed to create user: %v", err)
+	}
+
+	// Change password
+	newPassword := "newpassword456"
+	err = service.ChangePassword(ctx, user.ID, currentPassword, newPassword)
+	if err != nil {
+		t.Fatalf("ChangePassword failed: %v", err)
+	}
+
+	// Verify old password no longer works
+	updatedUser, err := service.GetUser(ctx, user.ID)
+	if err != nil {
+		t.Fatalf("GetUser failed: %v", err)
+	}
+	if err := VerifyPassword(updatedUser.PasswordHash, currentPassword); err == nil {
+		t.Error("Old password should not work after change")
+	}
+
+	// Verify new password works
+	if err := VerifyPassword(updatedUser.PasswordHash, newPassword); err != nil {
+		t.Error("New password should work after change")
+	}
+}
+
+func TestChangePassword_WrongCurrentPassword(t *testing.T) {
+	store, err := storage.NewSQLiteStore("file::memory:?cache=shared")
+	if err != nil {
+		t.Fatalf("Failed to create test store: %v", err)
+	}
+	defer store.Close()
+
+	service, err := NewService(store, "test-secret", 15*time.Minute)
+	if err != nil {
+		t.Fatalf("Failed to create service: %v", err)
+	}
+
+	ctx := context.Background()
+
+	// Create a user
+	currentPassword := "oldpassword123"
+	user, _, err := service.CreateUser(ctx, "user@example.com", currentPassword)
+	if err != nil {
+		t.Fatalf("Failed to create user: %v", err)
+	}
+
+	// Try to change password with wrong current password
+	err = service.ChangePassword(ctx, user.ID, "wrongpassword", "newpassword456")
+	if err == nil {
+		t.Fatal("Expected error for wrong current password")
+	}
+	if !strings.Contains(err.Error(), "current password is incorrect") {
+		t.Errorf("Expected 'current password is incorrect' error, got: %v", err)
+	}
+
+	// Verify password hasn't changed
+	updatedUser, err := service.GetUser(ctx, user.ID)
+	if err != nil {
+		t.Fatalf("GetUser failed: %v", err)
+	}
+	if err := VerifyPassword(updatedUser.PasswordHash, currentPassword); err != nil {
+		t.Error("Original password should still work")
+	}
+}
+
+func TestChangePassword_WeakNewPassword(t *testing.T) {
+	store, err := storage.NewSQLiteStore("file::memory:?cache=shared")
+	if err != nil {
+		t.Fatalf("Failed to create test store: %v", err)
+	}
+	defer store.Close()
+
+	service, err := NewService(store, "test-secret", 15*time.Minute)
+	if err != nil {
+		t.Fatalf("Failed to create service: %v", err)
+	}
+
+	ctx := context.Background()
+
+	// Create a user
+	currentPassword := "oldpassword123"
+	user, _, err := service.CreateUser(ctx, "user@example.com", currentPassword)
+	if err != nil {
+		t.Fatalf("Failed to create user: %v", err)
+	}
+
+	// Try to change password to a weak password (< 8 characters)
+	err = service.ChangePassword(ctx, user.ID, currentPassword, "weak")
+	if err == nil {
+		t.Fatal("Expected error for weak password")
+	}
+	if !strings.Contains(err.Error(), "must be at least 8 characters") {
+		t.Errorf("Expected 'must be at least 8 characters' error, got: %v", err)
+	}
+
+	// Verify password hasn't changed
+	updatedUser, err := service.GetUser(ctx, user.ID)
+	if err != nil {
+		t.Fatalf("GetUser failed: %v", err)
+	}
+	if err := VerifyPassword(updatedUser.PasswordHash, currentPassword); err != nil {
+		t.Error("Original password should still work")
+	}
+}
+
+func TestChangePassword_NonexistentUser(t *testing.T) {
+	store, err := storage.NewSQLiteStore("file::memory:?cache=shared")
+	if err != nil {
+		t.Fatalf("Failed to create test store: %v", err)
+	}
+	defer store.Close()
+
+	service, err := NewService(store, "test-secret", 15*time.Minute)
+	if err != nil {
+		t.Fatalf("Failed to create service: %v", err)
+	}
+
+	ctx := context.Background()
+
+	// Try to change password for non-existent user
+	err = service.ChangePassword(ctx, 9999, "oldpassword", "newpassword123")
+	if err == nil {
+		t.Fatal("Expected error for non-existent user")
+	}
+	if !strings.Contains(err.Error(), "user not found") {
+		t.Errorf("Expected 'user not found' error, got: %v", err)
+	}
+}
+
+func TestChangePassword_EmptyCurrentPassword(t *testing.T) {
+	store, err := storage.NewSQLiteStore("file::memory:?cache=shared")
+	if err != nil {
+		t.Fatalf("Failed to create test store: %v", err)
+	}
+	defer store.Close()
+
+	service, err := NewService(store, "test-secret", 15*time.Minute)
+	if err != nil {
+		t.Fatalf("Failed to create service: %v", err)
+	}
+
+	ctx := context.Background()
+
+	// Create a user
+	user, _, err := service.CreateUser(ctx, "user@example.com", "password123")
+	if err != nil {
+		t.Fatalf("Failed to create user: %v", err)
+	}
+
+	// Try to change password with empty current password
+	err = service.ChangePassword(ctx, user.ID, "", "newpassword123")
+	if err == nil {
+		t.Fatal("Expected error for empty current password")
+	}
+	if !strings.Contains(err.Error(), "current password cannot be empty") {
+		t.Errorf("Expected 'current password cannot be empty' error, got: %v", err)
+	}
+}
+
+func TestChangePassword_EmptyNewPassword(t *testing.T) {
+	store, err := storage.NewSQLiteStore("file::memory:?cache=shared")
+	if err != nil {
+		t.Fatalf("Failed to create test store: %v", err)
+	}
+	defer store.Close()
+
+	service, err := NewService(store, "test-secret", 15*time.Minute)
+	if err != nil {
+		t.Fatalf("Failed to create service: %v", err)
+	}
+
+	ctx := context.Background()
+
+	// Create a user
+	currentPassword := "password123"
+	user, _, err := service.CreateUser(ctx, "user@example.com", currentPassword)
+	if err != nil {
+		t.Fatalf("Failed to create user: %v", err)
+	}
+
+	// Try to change password with empty new password
+	err = service.ChangePassword(ctx, user.ID, currentPassword, "")
+	if err == nil {
+		t.Fatal("Expected error for empty new password")
+	}
+	if !strings.Contains(err.Error(), "new password cannot be empty") {
+		t.Errorf("Expected 'new password cannot be empty' error, got: %v", err)
 	}
 }

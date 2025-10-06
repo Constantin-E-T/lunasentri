@@ -129,6 +129,18 @@ The web interface will be available at `http://localhost:3000`
 - Redirected to dashboard `/`
 - Logout button in header clears session
 
+**Registration Flow**:
+- Navigate to `/register` or click "Create account" link from login page
+- Enter email, password (8+ characters), and confirm password
+- Client-side validation ensures passwords match and meet requirements
+- On successful registration:
+  - User account is created via `POST /auth/register`
+  - First user to register becomes an administrator automatically
+  - User is automatically logged in (session cookie set)
+  - Redirected to dashboard `/`
+- Already authenticated users are redirected to dashboard if they visit `/register`
+- Admin users see "Manage Users" link in dashboard header; regular users don't
+
 **Manage Users**:
 - Click "Manage Users" link in dashboard header to access `/users` page
 - **List Users**: View all users with email and creation date
@@ -230,17 +242,48 @@ pnpm start
 #### Protected Endpoints (require authentication)
 
 - `GET /auth/me` - Get current user profile
+- `POST /auth/change-password` - Change password (logged-in user)
 - `GET /auth/users` - List all users
 - `POST /auth/users` - Create a new user
 - `DELETE /auth/users/{id}` - Delete a user by ID
 - `GET /metrics` - System metrics (CPU, memory, disk, uptime)
 - `WebSocket /ws` - Real-time metrics streaming (sends JSON every ~3 seconds)
 
-#### Authentication Endpoints
+#### Registration and Authentication
+
+**POST /auth/register** (Public)
+
+Self-serve user registration. The first user to register automatically becomes an admin.
+
+```bash
+# Register first user (becomes admin)
+curl -X POST http://localhost:8080/auth/register \
+  -H "Content-Type: application/json" \
+  -d '{"email":"admin@example.com","password":"SecurePassword123"}'
+
+# Response: {"id":1,"email":"admin@example.com","is_admin":true,"created_at":"2025-10-06T20:00:00Z"}
+
+# Register additional users (non-admin)
+curl -X POST http://localhost:8080/auth/register \
+  -H "Content-Type: application/json" \
+  -d '{"email":"user@example.com","password":"AnotherPassword123"}'
+
+# Response: {"id":2,"email":"user@example.com","is_admin":false,"created_at":"2025-10-06T20:01:00Z"}
+```
+
+**Registration Validation:**
+- Email: Must be non-empty and contain `@`
+- Password: Must be at least 8 characters long
+- Duplicate emails return 409 Conflict
+
+**First User Admin Promotion:**
+- The first user to register automatically receives admin privileges
+- This ensures the system always has at least one administrator
+- Subsequent users are created as regular users (non-admin)
 
 **POST /auth/login**
 
-Login with email and password. Returns user profile and sets HttpOnly session cookie.
+Login with email and password. Returns user profile (including `is_admin` flag) and sets HttpOnly session cookie.
 
 ```bash
 curl -X POST http://localhost:8080/auth/login \
@@ -333,6 +376,83 @@ curl -X POST http://localhost:8080/auth/reset-password \
 - Password must be at least 8 characters
 - Old password stops working immediately after reset
 
+**POST /auth/change-password**
+
+Change password for the currently logged-in user. Requires authentication and knowledge of current password (self-service password change).
+
+```bash
+# Login first to get session cookie
+curl -X POST http://localhost:8080/auth/login \
+  -H "Content-Type: application/json" \
+  -d '{"email":"user@example.com","password":"oldpassword123"}' \
+  -c cookies.txt
+
+# Change password (requires current password)
+curl -X POST http://localhost:8080/auth/change-password \
+  -H "Content-Type: application/json" \
+  -b cookies.txt \
+  -d '{"current_password":"oldpassword123","new_password":"newpassword456"}'
+
+# Response: 204 No Content (success)
+# Or 401 Unauthorized (wrong current password)
+# Or 400 Bad Request (weak new password)
+```
+
+**Password Change Requirements:**
+- User must be logged in (valid session cookie)
+- Must provide correct current password
+- New password must be at least 8 characters
+- New password must be different from current password
+- Outstanding password reset tokens are automatically invalidated
+
+**Error Responses:**
+- `400 Bad Request`: Invalid request body or weak new password
+- `401 Unauthorized`: Incorrect current password
+- `404 Not Found`: User account not found (rare edge case)
+
+**Security Notes:**
+- Self-service: Users can change their own password without admin intervention
+- Verifies current password before allowing change (prevents unauthorized password changes if session is compromised)
+- New password is hashed with bcrypt (cost 12) before storage
+- Old password stops working immediately after successful change
+- All password reset tokens for the user are invalidated (prevents reset token reuse)
+- Action is logged with user ID for audit trail
+
+**Complete Change Password Flow:**
+
+1. Login with current credentials:
+   ```bash
+   curl -X POST http://localhost:8080/auth/login \
+     -H "Content-Type: application/json" \
+     -d '{"email":"user@example.com","password":"oldpassword123"}' \
+     -c cookies.txt
+   ```
+
+2. Change password:
+   ```bash
+   curl -X POST http://localhost:8080/auth/change-password \
+     -H "Content-Type: application/json" \
+     -b cookies.txt \
+     -d '{"current_password":"oldpassword123","new_password":"newpassword456"}'
+   ```
+
+3. Verify old password no longer works:
+   ```bash
+   curl -X POST http://localhost:8080/auth/login \
+     -H "Content-Type: application/json" \
+     -d '{"email":"user@example.com","password":"oldpassword123"}'
+   # Should return 401 Unauthorized
+   ```
+
+4. Login with new password:
+   ```bash
+   curl -X POST http://localhost:8080/auth/login \
+     -H "Content-Type: application/json" \
+     -d '{"email":"user@example.com","password":"newpassword456"}' \
+     -c cookies.txt
+   # Should succeed
+   ```
+
 #### User Management Endpoints
 
 **GET /auth/users**
@@ -367,23 +487,26 @@ curl -b cookies.txt -X POST http://localhost:8080/auth/users \
 
 **DELETE /auth/users/{id}**
 
-Delete a user by ID. Cannot delete yourself or the last remaining user. Requires authentication.
+Delete a user by ID. Cannot delete yourself or the last admin. Requires authentication.
 
 ```bash
 curl -b cookies.txt -X DELETE http://localhost:8080/auth/users/2
 
 # Response: 204 No Content (success)
-# Or 403 Forbidden (cannot delete self or last user)
+# Or 403 Forbidden (cannot delete self or last admin)
 # Or 404 Not Found (user doesn't exist)
 ```
 
 **User Management Notes:**
-- Initial admin user is created from `ADMIN_EMAIL` and `ADMIN_PASSWORD` environment variables
-- Additional users can be created via the API by any authenticated user
+- First user can register via `/auth/register` and becomes admin automatically
+- Initial admin user can also be created from `ADMIN_EMAIL` and `ADMIN_PASSWORD` environment variables
+- Additional users can be created via public registration or by authenticated users via the API
 - Users cannot delete their own account (prevents accidental lockout)
-- System prevents deletion of the last remaining user
+- System prevents deletion of the last admin (ensures administrative access)
+- Regular users (non-admin) can be deleted even if they're the only user
 - Email format validation (must contain @)
 - Duplicate emails are rejected with 409 Conflict
+- All user responses now include the `is_admin` boolean field
 
 **Frontend Usage:**
 

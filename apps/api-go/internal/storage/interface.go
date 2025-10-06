@@ -18,6 +18,7 @@ type User struct {
 	ID           int       `json:"id"`
 	Email        string    `json:"email"`
 	PasswordHash string    `json:"password_hash"`
+	IsAdmin      bool      `json:"is_admin"`
 	CreatedAt    time.Time `json:"created_at"`
 }
 
@@ -52,6 +53,15 @@ type Store interface {
 
     // DeleteUser deletes a user by ID
     DeleteUser(ctx context.Context, id int) error
+
+    // CountUsers returns the total number of users
+    CountUsers(ctx context.Context) (int, error)
+
+    // PromoteToAdmin promotes a user to admin status
+    PromoteToAdmin(ctx context.Context, userID int) error
+
+    // DeletePasswordResetsForUser deletes all password reset tokens for a user
+    DeletePasswordResetsForUser(ctx context.Context, userID int) error
 
 	// Close closes the storage connection
 	Close() error

@@ -29,6 +29,7 @@ type CreateUserResponse struct {
 }
 
 // CreateUser creates a new user with email validation
+// If this is the first user, they are automatically promoted to admin
 func (s *Service) CreateUser(ctx context.Context, email, password string) (*storage.User, string, error) {
 	// Validate email
 	if email == "" {
@@ -55,6 +56,12 @@ func (s *Service) CreateUser(ctx context.Context, email, password string) (*stor
 		return nil, "", fmt.Errorf("failed to hash password: %w", err)
 	}
 
+	// Check if this is the first user
+	userCount, err := s.store.CountUsers(ctx)
+	if err != nil {
+		return nil, "", fmt.Errorf("failed to check user count: %w", err)
+	}
+
 	// Create the user
 	user, err := s.store.CreateUser(ctx, email, passwordHash)
 	if err != nil {
@@ -63,6 +70,15 @@ func (s *Service) CreateUser(ctx context.Context, email, password string) (*stor
 			return nil, "", fmt.Errorf("user with email %s already exists", email)
 		}
 		return nil, "", fmt.Errorf("failed to create user: %w", err)
+	}
+
+	// Promote to admin if first user
+	if userCount == 0 {
+		err = s.store.PromoteToAdmin(ctx, user.ID)
+		if err != nil {
+			return nil, "", fmt.Errorf("failed to promote first user to admin: %w", err)
+		}
+		user.IsAdmin = true
 	}
 
 	return user, tempPassword, nil
@@ -84,16 +100,66 @@ func (s *Service) DeleteUser(ctx context.Context, userID, currentUserID int) err
 		return fmt.Errorf("cannot delete your own account")
 	}
 
-	// Delete the user (store will prevent deleting last user)
+	// Delete the user (store will prevent deleting last admin)
 	err := s.store.DeleteUser(ctx, userID)
 	if err != nil {
-		if strings.Contains(err.Error(), "cannot delete the last user") {
-			return fmt.Errorf("cannot delete the last remaining user")
+		if strings.Contains(err.Error(), "cannot delete the last admin") {
+			return fmt.Errorf("cannot delete the last admin")
 		}
 		if err == storage.ErrUserNotFound {
 			return fmt.Errorf("user not found")
 		}
 		return fmt.Errorf("failed to delete user: %w", err)
+	}
+
+	return nil
+}
+
+// ChangePassword allows a logged-in user to change their password
+// Verifies current password before allowing the change
+func (s *Service) ChangePassword(ctx context.Context, userID int, currentPassword, newPassword string) error {
+	// Validate inputs
+	if currentPassword == "" {
+		return fmt.Errorf("current password cannot be empty")
+	}
+	if newPassword == "" {
+		return fmt.Errorf("new password cannot be empty")
+	}
+
+	// Validate new password strength (minimum 8 characters)
+	if len(newPassword) < 8 {
+		return fmt.Errorf("new password must be at least 8 characters long")
+	}
+
+	// Get user by ID
+	user, err := s.store.GetUserByID(ctx, userID)
+	if err != nil {
+		if err == storage.ErrUserNotFound {
+			return fmt.Errorf("user not found")
+		}
+		return fmt.Errorf("failed to retrieve user: %w", err)
+	}
+
+	// Verify current password
+	if err := VerifyPassword(user.PasswordHash, currentPassword); err != nil {
+		return fmt.Errorf("current password is incorrect")
+	}
+
+	// Hash the new password
+	newPasswordHash, err := HashPassword(newPassword)
+	if err != nil {
+		return fmt.Errorf("failed to hash new password: %w", err)
+	}
+
+	// Update the user's password
+	if err := s.store.UpdateUserPassword(ctx, userID, newPasswordHash); err != nil {
+		return fmt.Errorf("failed to update password: %w", err)
+	}
+
+	// Invalidate outstanding password reset tokens for this user
+	if err := s.store.DeletePasswordResetsForUser(ctx, userID); err != nil {
+		// Log the error but don't fail the request since password was updated
+		fmt.Printf("Warning: failed to delete password resets for user %d: %v\n", userID, err)
 	}
 
 	return nil

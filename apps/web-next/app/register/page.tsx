@@ -5,11 +5,12 @@ import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { useSession } from '@/lib/useSession';
 
-export default function LoginPage() {
+export default function RegisterPage() {
   const router = useRouter();
-  const { status, login } = useSession();
+  const { status, register } = useSession();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
   const [error, setError] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
 
@@ -20,17 +21,41 @@ export default function LoginPage() {
     }
   }, [status, router]);
 
+  function validateForm(): string | null {
+    if (!email.trim()) {
+      return 'Email is required';
+    }
+    if (!email.includes('@')) {
+      return 'Please enter a valid email address';
+    }
+    if (password.length < 8) {
+      return 'Password must be at least 8 characters long';
+    }
+    if (password !== confirmPassword) {
+      return 'Passwords do not match';
+    }
+    return null;
+  }
+
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
     setError('');
+
+    // Client-side validation
+    const validationError = validateForm();
+    if (validationError) {
+      setError(validationError);
+      return;
+    }
+
     setIsSubmitting(true);
 
     try {
-      await login(email, password);
-      // Redirect happens via useEffect when status changes to 'authenticated'
+      await register(email, password);
+      // Redirect to dashboard after successful registration
       router.push('/');
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Login failed');
+      setError(err instanceof Error ? err.message : 'Registration failed');
     } finally {
       setIsSubmitting(false);
     }
@@ -45,7 +70,7 @@ export default function LoginPage() {
     );
   }
 
-  // Don't show login form if already authenticated (will redirect)
+  // Don't show registration form if already authenticated (will redirect)
   if (status === 'authenticated') {
     return null;
   }
@@ -58,10 +83,10 @@ export default function LoginPage() {
           <h1 className="text-4xl font-bold text-white mb-2">
             🌙 LunaSentri
           </h1>
-          <p className="text-slate-400">Sign in to your dashboard</p>
+          <p className="text-slate-400">Create your account</p>
         </div>
 
-        {/* Login Form Card */}
+        {/* Registration Form Card */}
         <div className="bg-slate-800/50 backdrop-blur-sm rounded-xl p-8 shadow-2xl border border-slate-700/50">
           <form onSubmit={handleSubmit} className="space-y-6">
             {/* Email Field */}
@@ -77,7 +102,7 @@ export default function LoginPage() {
                 required
                 disabled={isSubmitting}
                 className="w-full px-4 py-3 bg-slate-900/50 border border-slate-600 rounded-lg text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:opacity-50 disabled:cursor-not-allowed transition-all"
-                placeholder="admin@example.com"
+                placeholder="you@example.com"
                 autoComplete="email"
               />
             </div>
@@ -96,7 +121,29 @@ export default function LoginPage() {
                 disabled={isSubmitting}
                 className="w-full px-4 py-3 bg-slate-900/50 border border-slate-600 rounded-lg text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:opacity-50 disabled:cursor-not-allowed transition-all"
                 placeholder="••••••••"
-                autoComplete="current-password"
+                autoComplete="new-password"
+                minLength={8}
+              />
+              <p className="text-xs text-slate-500 mt-1">
+                Must be at least 8 characters long
+              </p>
+            </div>
+
+            {/* Confirm Password Field */}
+            <div>
+              <label htmlFor="confirmPassword" className="block text-sm font-medium text-slate-300 mb-2">
+                Confirm Password
+              </label>
+              <input
+                id="confirmPassword"
+                type="password"
+                value={confirmPassword}
+                onChange={(e) => setConfirmPassword(e.target.value)}
+                required
+                disabled={isSubmitting}
+                className="w-full px-4 py-3 bg-slate-900/50 border border-slate-600 rounded-lg text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:opacity-50 disabled:cursor-not-allowed transition-all"
+                placeholder="••••••••"
+                autoComplete="new-password"
               />
             </div>
 
@@ -113,25 +160,29 @@ export default function LoginPage() {
               disabled={isSubmitting}
               className="w-full bg-blue-600 hover:bg-blue-700 disabled:bg-slate-700 disabled:cursor-not-allowed text-white font-medium py-3 px-4 rounded-lg transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 focus:ring-offset-slate-800"
             >
-              {isSubmitting ? 'Signing in...' : 'Sign in'}
+              {isSubmitting ? 'Creating account...' : 'Create account'}
             </button>
           </form>
 
-          {/* Helper Text */}
+          {/* Login Link */}
           <div className="mt-6 pt-6 border-t border-slate-700/50">
-            <p className="text-xs text-slate-500 text-center mb-4">
-              Use the credentials set via ADMIN_EMAIL and ADMIN_PASSWORD environment variables
-            </p>
             <p className="text-sm text-slate-400 text-center">
-              Don't have an account?{' '}
+              Already have an account?{' '}
               <Link 
-                href="/register" 
+                href="/login" 
                 className="text-blue-400 hover:text-blue-300 transition-colors"
               >
-                Create account
+                Sign in
               </Link>
             </p>
           </div>
+        </div>
+
+        {/* Info */}
+        <div className="mt-6">
+          <p className="text-xs text-slate-500 text-center">
+            The first user to register becomes an administrator
+          </p>
         </div>
       </div>
     </div>

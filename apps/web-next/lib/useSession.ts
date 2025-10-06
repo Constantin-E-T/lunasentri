@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState, useCallback } from 'react';
-import { fetchCurrentUser, login as apiLogin, logout as apiLogout, type User } from './api';
+import { fetchCurrentUser, login as apiLogin, logout as apiLogout, register as apiRegister, type User } from './api';
 
 export type SessionStatus = 'loading' | 'authenticated' | 'unauthenticated';
 
@@ -9,6 +9,7 @@ export interface Session {
   user: User | null;
   status: SessionStatus;
   login: (email: string, password: string) => Promise<void>;
+  register: (email: string, password: string) => Promise<void>;
   logout: () => Promise<void>;
 }
 
@@ -44,6 +45,30 @@ export function useSession(): Session {
     }
   }, []);
 
+  const register = useCallback(async (email: string, password: string) => {
+    try {
+      // Register the user
+      const registeredUser = await apiRegister(email, password);
+      
+      // After successful registration, try to log them in automatically
+      // by fetching the current user (registration endpoint should set session cookie)
+      try {
+        const currentUser = await fetchCurrentUser();
+        setUser(currentUser);
+        setStatus('authenticated');
+      } catch {
+        // If fetching current user fails, the registration didn't auto-login
+        // Keep them unauthenticated and they'll need to login manually
+        setUser(null);
+        setStatus('unauthenticated');
+      }
+    } catch (error) {
+      setUser(null);
+      setStatus('unauthenticated');
+      throw error; // Re-throw so caller can handle error display
+    }
+  }, []);
+
   const logout = useCallback(async () => {
     try {
       await apiLogout();
@@ -58,6 +83,7 @@ export function useSession(): Session {
     user,
     status,
     login,
+    register,
     logout,
   };
 }

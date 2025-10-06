@@ -522,7 +522,7 @@ func TestSQLiteStore_DeleteUser_NotFound(t *testing.T) {
 	}
 }
 
-func TestSQLiteStore_DeleteUser_LastUser(t *testing.T) {
+func TestSQLiteStore_DeleteUser_CanDeleteNonAdminUser(t *testing.T) {
 	store, err := NewSQLiteStore("file::memory:?cache=shared")
 	if err != nil {
 		t.Fatalf("Failed to create test store: %v", err)
@@ -531,27 +531,274 @@ func TestSQLiteStore_DeleteUser_LastUser(t *testing.T) {
 
 	ctx := context.Background()
 
-	// Create only one user
-	user, err := store.CreateUser(ctx, "lastuser@example.com", "hash")
+	// Create only one non-admin user
+	user, err := store.CreateUser(ctx, "user@example.com", "hash")
 	if err != nil {
 		t.Fatalf("Failed to create user: %v", err)
 	}
 
-	// Try to delete the last user (should fail)
+	// Should be able to delete non-admin user even if they're the only user
 	err = store.DeleteUser(ctx, user.ID)
-	if err == nil {
-		t.Fatal("Expected error when deleting last user")
-	}
-	if err.Error() != "cannot delete the last user" {
-		t.Errorf("Expected 'cannot delete the last user' error, got: %v", err)
+	if err != nil {
+		t.Fatalf("Should be able to delete non-admin user: %v", err)
 	}
 
-	// Verify user still exists
+	// Verify user is deleted
 	users, err := store.ListUsers(ctx)
 	if err != nil {
 		t.Fatalf("Failed to list users: %v", err)
 	}
-	if len(users) != 1 {
-		t.Errorf("Expected 1 user to remain, got %d", len(users))
+	if len(users) != 0 {
+		t.Errorf("Expected 0 users, got %d", len(users))
+	}
+}
+
+func TestSQLiteStore_IsAdmin_DefaultFalse(t *testing.T) {
+	store, err := NewSQLiteStore("file::memory:?cache=shared")
+	if err != nil {
+		t.Fatalf("Failed to create test store: %v", err)
+	}
+	defer store.Close()
+
+	ctx := context.Background()
+
+	// Create a user
+	user, err := store.CreateUser(ctx, "user@example.com", "hash")
+	if err != nil {
+		t.Fatalf("Failed to create user: %v", err)
+	}
+
+	// Verify is_admin defaults to false
+	if user.IsAdmin {
+		t.Error("Expected is_admin to be false for new user")
+	}
+}
+
+func TestSQLiteStore_PromoteToAdmin(t *testing.T) {
+	store, err := NewSQLiteStore("file::memory:?cache=shared")
+	if err != nil {
+		t.Fatalf("Failed to create test store: %v", err)
+	}
+	defer store.Close()
+
+	ctx := context.Background()
+
+	// Create a user
+	user, err := store.CreateUser(ctx, "user@example.com", "hash")
+	if err != nil {
+		t.Fatalf("Failed to create user: %v", err)
+	}
+
+	// Verify initially not admin
+	if user.IsAdmin {
+		t.Error("Expected user to not be admin initially")
+	}
+
+	// Promote to admin
+	err = store.PromoteToAdmin(ctx, user.ID)
+	if err != nil {
+		t.Fatalf("PromoteToAdmin failed: %v", err)
+	}
+
+	// Verify user is now admin
+	updated, err := store.GetUserByID(ctx, user.ID)
+	if err != nil {
+		t.Fatalf("Failed to get user: %v", err)
+	}
+	if !updated.IsAdmin {
+		t.Error("Expected user to be admin after promotion")
+	}
+}
+
+func TestSQLiteStore_CountUsers(t *testing.T) {
+	store, err := NewSQLiteStore("file::memory:?cache=shared")
+	if err != nil {
+		t.Fatalf("Failed to create test store: %v", err)
+	}
+	defer store.Close()
+
+	ctx := context.Background()
+
+	// Initially no users
+	count, err := store.CountUsers(ctx)
+	if err != nil {
+		t.Fatalf("CountUsers failed: %v", err)
+	}
+	if count != 0 {
+		t.Errorf("Expected 0 users, got %d", count)
+	}
+
+	// Create users
+	_, err = store.CreateUser(ctx, "user1@example.com", "hash1")
+	if err != nil {
+		t.Fatalf("Failed to create user1: %v", err)
+	}
+
+	count, err = store.CountUsers(ctx)
+	if err != nil {
+		t.Fatalf("CountUsers failed: %v", err)
+	}
+	if count != 1 {
+		t.Errorf("Expected 1 user, got %d", count)
+	}
+
+	_, err = store.CreateUser(ctx, "user2@example.com", "hash2")
+	if err != nil {
+		t.Fatalf("Failed to create user2: %v", err)
+	}
+
+	count, err = store.CountUsers(ctx)
+	if err != nil {
+		t.Fatalf("CountUsers failed: %v", err)
+	}
+	if count != 2 {
+		t.Errorf("Expected 2 users, got %d", count)
+	}
+}
+
+func TestSQLiteStore_DeleteUser_LastAdmin(t *testing.T) {
+	store, err := NewSQLiteStore("file::memory:?cache=shared")
+	if err != nil {
+		t.Fatalf("Failed to create test store: %v", err)
+	}
+	defer store.Close()
+
+	ctx := context.Background()
+
+	// Create admin user
+	admin, err := store.CreateUser(ctx, "admin@example.com", "hash")
+	if err != nil {
+		t.Fatalf("Failed to create admin: %v", err)
+	}
+	err = store.PromoteToAdmin(ctx, admin.ID)
+	if err != nil {
+		t.Fatalf("Failed to promote to admin: %v", err)
+	}
+
+	// Create regular user
+	_, err = store.CreateUser(ctx, "user@example.com", "hash")
+	if err != nil {
+		t.Fatalf("Failed to create user: %v", err)
+	}
+
+	// Try to delete the only admin (should fail)
+	err = store.DeleteUser(ctx, admin.ID)
+	if err == nil {
+		t.Fatal("Expected error when deleting last admin")
+	}
+	if err.Error() != "cannot delete the last admin" {
+		t.Errorf("Expected 'cannot delete the last admin' error, got: %v", err)
+	}
+
+	// Verify admin still exists
+	_, err = store.GetUserByID(ctx, admin.ID)
+	if err != nil {
+		t.Fatalf("Admin should still exist: %v", err)
+	}
+}
+
+func TestSQLiteStore_DeleteUser_MultipleAdmins(t *testing.T) {
+	store, err := NewSQLiteStore("file::memory:?cache=shared")
+	if err != nil {
+		t.Fatalf("Failed to create test store: %v", err)
+	}
+	defer store.Close()
+
+	ctx := context.Background()
+
+	// Create first admin
+	admin1, err := store.CreateUser(ctx, "admin1@example.com", "hash")
+	if err != nil {
+		t.Fatalf("Failed to create admin1: %v", err)
+	}
+	err = store.PromoteToAdmin(ctx, admin1.ID)
+	if err != nil {
+		t.Fatalf("Failed to promote admin1: %v", err)
+	}
+
+	// Create second admin
+	admin2, err := store.CreateUser(ctx, "admin2@example.com", "hash")
+	if err != nil {
+		t.Fatalf("Failed to create admin2: %v", err)
+	}
+	err = store.PromoteToAdmin(ctx, admin2.ID)
+	if err != nil {
+		t.Fatalf("Failed to promote admin2: %v", err)
+	}
+
+	// Delete first admin (should succeed since there's another admin)
+	err = store.DeleteUser(ctx, admin1.ID)
+	if err != nil {
+		t.Fatalf("Should be able to delete admin when another admin exists: %v", err)
+	}
+
+	// Verify admin1 is gone
+	_, err = store.GetUserByID(ctx, admin1.ID)
+	if err != ErrUserNotFound {
+		t.Errorf("Expected ErrUserNotFound for deleted admin, got: %v", err)
+	}
+
+	// Verify admin2 still exists
+	_, err = store.GetUserByID(ctx, admin2.ID)
+	if err != nil {
+		t.Fatalf("Admin2 should still exist: %v", err)
+	}
+}
+
+func TestSQLiteStore_ListUsers_IncludesAdminFlag(t *testing.T) {
+	store, err := NewSQLiteStore("file::memory:?cache=shared")
+	if err != nil {
+		t.Fatalf("Failed to create test store: %v", err)
+	}
+	defer store.Close()
+
+	ctx := context.Background()
+
+	// Create admin user
+	admin, err := store.CreateUser(ctx, "admin@example.com", "hash")
+	if err != nil {
+		t.Fatalf("Failed to create admin: %v", err)
+	}
+	err = store.PromoteToAdmin(ctx, admin.ID)
+	if err != nil {
+		t.Fatalf("Failed to promote to admin: %v", err)
+	}
+
+	// Create regular user
+	_, err = store.CreateUser(ctx, "user@example.com", "hash")
+	if err != nil {
+		t.Fatalf("Failed to create user: %v", err)
+	}
+
+	// List all users
+	users, err := store.ListUsers(ctx)
+	if err != nil {
+		t.Fatalf("ListUsers failed: %v", err)
+	}
+
+	// Verify admin flag is included
+	if len(users) != 2 {
+		t.Fatalf("Expected 2 users, got %d", len(users))
+	}
+
+	// Find admin and regular user
+	var foundAdmin, foundUser bool
+	for _, u := range users {
+		if u.Email == "admin@example.com" {
+			if !u.IsAdmin {
+				t.Error("Expected admin@example.com to have is_admin=true")
+			}
+			foundAdmin = true
+		}
+		if u.Email == "user@example.com" {
+			if u.IsAdmin {
+				t.Error("Expected user@example.com to have is_admin=false")
+			}
+			foundUser = true
+		}
+	}
+
+	if !foundAdmin || !foundUser {
+		t.Error("Failed to find both admin and user in list")
 	}
 }

@@ -8,6 +8,7 @@ export interface Metrics {
 export interface User {
   id: number;
   email: string;
+  is_admin: boolean;
   created_at?: string;
 }
 
@@ -19,6 +20,7 @@ export interface CreateUserRequest {
 export interface CreateUserResponse {
   id: number;
   email: string;
+  is_admin: boolean;
   created_at: string;
   temp_password?: string;
 }
@@ -75,6 +77,25 @@ export async function logout(): Promise<void> {
   if (!response.ok && response.status !== 204) {
     throw new Error(`Logout failed: ${response.status} ${response.statusText}`);
   }
+}
+
+export async function register(email: string, password: string): Promise<CreateUserResponse> {
+  const response = await fetch(`${API_URL}/auth/register`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    credentials: 'include', // Include cookies for authentication
+    body: JSON.stringify({ email, password }),
+  });
+
+  if (!response.ok) {
+    const errorData = await response.json().catch(() => null);
+    const message = errorData?.error || `Registration failed: ${response.status} ${response.statusText}`;
+    throw new Error(message);
+  }
+
+  return response.json();
 }
 
 export async function fetchCurrentUser(): Promise<User> {

@@ -79,6 +79,12 @@ func (s *SQLiteStore) migrate() error {
             CREATE INDEX IF NOT EXISTS idx_password_resets_token_hash ON password_resets(token_hash);
             `,
         },
+        {
+            version: "003_add_is_admin_to_users",
+            sql: `
+            ALTER TABLE users ADD COLUMN is_admin BOOLEAN DEFAULT 0 NOT NULL;
+            `,
+        },
     }
 
 	// Apply each migration if not already applied
@@ -128,17 +134,18 @@ func (s *SQLiteStore) applyMigration(m migration) error {
 // CreateUser creates a new user with the given email and password hash
 func (s *SQLiteStore) CreateUser(ctx context.Context, email, passwordHash string) (*User, error) {
 	query := `
-	INSERT INTO users (email, password_hash, created_at) 
-	VALUES (?, ?, ?) 
-	RETURNING id, email, password_hash, created_at`
+	INSERT INTO users (email, password_hash, is_admin, created_at)
+	VALUES (?, ?, ?, ?)
+	RETURNING id, email, password_hash, is_admin, created_at`
 
 	now := time.Now()
 	user := &User{}
 
-	err := s.db.QueryRowContext(ctx, query, email, passwordHash, now).Scan(
+	err := s.db.QueryRowContext(ctx, query, email, passwordHash, false, now).Scan(
 		&user.ID,
 		&user.Email,
 		&user.PasswordHash,
+		&user.IsAdmin,
 		&user.CreatedAt,
 	)
 	if err != nil {
@@ -153,13 +160,14 @@ func (s *SQLiteStore) CreateUser(ctx context.Context, email, passwordHash string
 
 // GetUserByEmail retrieves a user by their email address
 func (s *SQLiteStore) GetUserByEmail(ctx context.Context, email string) (*User, error) {
-	query := `SELECT id, email, password_hash, created_at FROM users WHERE email = ?`
+	query := `SELECT id, email, password_hash, is_admin, created_at FROM users WHERE email = ?`
 
 	user := &User{}
     err := s.db.QueryRowContext(ctx, query, email).Scan(
         &user.ID,
         &user.Email,
         &user.PasswordHash,
+        &user.IsAdmin,
         &user.CreatedAt,
     )
     if err != nil {
@@ -174,13 +182,14 @@ func (s *SQLiteStore) GetUserByEmail(ctx context.Context, email string) (*User, 
 
 // GetUserByID retrieves a user by their ID
 func (s *SQLiteStore) GetUserByID(ctx context.Context, id int) (*User, error) {
-	query := `SELECT id, email, password_hash, created_at FROM users WHERE id = ?`
+	query := `SELECT id, email, password_hash, is_admin, created_at FROM users WHERE id = ?`
 
 	user := &User{}
     err := s.db.QueryRowContext(ctx, query, id).Scan(
         &user.ID,
         &user.Email,
         &user.PasswordHash,
+        &user.IsAdmin,
         &user.CreatedAt,
     )
     if err != nil {
@@ -310,7 +319,7 @@ func (s *SQLiteStore) MarkPasswordResetUsed(ctx context.Context, id int) error {
 
 // ListUsers retrieves all users ordered by email
 func (s *SQLiteStore) ListUsers(ctx context.Context) ([]User, error) {
-    query := `SELECT id, email, password_hash, created_at FROM users ORDER BY email ASC`
+    query := `SELECT id, email, password_hash, is_admin, created_at FROM users ORDER BY email ASC`
 
     rows, err := s.db.QueryContext(ctx, query)
     if err != nil {
@@ -321,7 +330,7 @@ func (s *SQLiteStore) ListUsers(ctx context.Context) ([]User, error) {
     var users []User
     for rows.Next() {
         var user User
-        err := rows.Scan(&user.ID, &user.Email, &user.PasswordHash, &user.CreatedAt)
+        err := rows.Scan(&user.ID, &user.Email, &user.PasswordHash, &user.IsAdmin, &user.CreatedAt)
         if err != nil {
             return nil, fmt.Errorf("failed to scan user: %w", err)
         }
@@ -337,9 +346,10 @@ func (s *SQLiteStore) ListUsers(ctx context.Context) ([]User, error) {
 
 // DeleteUser deletes a user by ID
 func (s *SQLiteStore) DeleteUser(ctx context.Context, id int) error {
-    // First, check if the user exists
+    // First, check if the user exists and if they are admin
     var exists bool
-    err := s.db.QueryRowContext(ctx, "SELECT EXISTS(SELECT 1 FROM users WHERE id = ?)", id).Scan(&exists)
+    var isAdmin bool
+    err := s.db.QueryRowContext(ctx, "SELECT EXISTS(SELECT 1 FROM users WHERE id = ?), COALESCE((SELECT is_admin FROM users WHERE id = ?), 0)", id, id).Scan(&exists, &isAdmin)
     if err != nil {
         return fmt.Errorf("failed to check user existence: %w", err)
     }
@@ -348,15 +358,17 @@ func (s *SQLiteStore) DeleteUser(ctx context.Context, id int) error {
         return ErrUserNotFound
     }
 
-    // Check if this is the last user
-    var count int
-    err = s.db.QueryRowContext(ctx, "SELECT COUNT(*) FROM users").Scan(&count)
-    if err != nil {
-        return fmt.Errorf("failed to count users: %w", err)
-    }
+    // Check if this is the last admin
+    if isAdmin {
+        var adminCount int
+        err = s.db.QueryRowContext(ctx, "SELECT COUNT(*) FROM users WHERE is_admin = 1").Scan(&adminCount)
+        if err != nil {
+            return fmt.Errorf("failed to count admins: %w", err)
+        }
 
-    if count <= 1 {
-        return fmt.Errorf("cannot delete the last user")
+        if adminCount <= 1 {
+            return fmt.Errorf("cannot delete the last admin")
+        }
     }
 
     // Delete the user
@@ -366,6 +378,43 @@ func (s *SQLiteStore) DeleteUser(ctx context.Context, id int) error {
         return fmt.Errorf("failed to delete user: %w", err)
     }
 
+    return nil
+}
+
+// CountUsers returns the total number of users
+func (s *SQLiteStore) CountUsers(ctx context.Context) (int, error) {
+    var count int
+    err := s.db.QueryRowContext(ctx, "SELECT COUNT(*) FROM users").Scan(&count)
+    if err != nil {
+        return 0, fmt.Errorf("failed to count users: %w", err)
+    }
+    return count, nil
+}
+
+// PromoteToAdmin promotes a user to admin status
+func (s *SQLiteStore) PromoteToAdmin(ctx context.Context, userID int) error {
+    query := `UPDATE users SET is_admin = 1 WHERE id = ?`
+    res, err := s.db.ExecContext(ctx, query, userID)
+    if err != nil {
+        return fmt.Errorf("failed to promote user to admin: %w", err)
+    }
+    rows, err := res.RowsAffected()
+    if err != nil {
+        return fmt.Errorf("failed to verify promotion: %w", err)
+    }
+    if rows == 0 {
+        return ErrUserNotFound
+    }
+    return nil
+}
+
+// DeletePasswordResetsForUser deletes all password reset tokens for a user
+func (s *SQLiteStore) DeletePasswordResetsForUser(ctx context.Context, userID int) error {
+    query := `DELETE FROM password_resets WHERE user_id = ?`
+    _, err := s.db.ExecContext(ctx, query, userID)
+    if err != nil {
+        return fmt.Errorf("failed to delete password resets: %w", err)
+    }
     return nil
 }
 

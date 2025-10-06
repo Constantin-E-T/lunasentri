@@ -57,10 +57,17 @@ type ResetPasswordRequest struct {
 	Password string `json:"password"`
 }
 
+// ChangePasswordRequest represents the change password request body
+type ChangePasswordRequest struct {
+	CurrentPassword string `json:"current_password"`
+	NewPassword     string `json:"new_password"`
+}
+
 // UserProfile represents the user profile response
 type UserProfile struct {
 	ID        int       `json:"id"`
 	Email     string    `json:"email"`
+	IsAdmin   bool      `json:"is_admin"`
 	CreatedAt time.Time `json:"created_at"`
 }
 
@@ -74,8 +81,81 @@ type CreateUserRequest struct {
 type CreateUserResponse struct {
 	ID           int       `json:"id"`
 	Email        string    `json:"email"`
+	IsAdmin      bool      `json:"is_admin"`
 	CreatedAt    time.Time `json:"created_at"`
 	TempPassword string    `json:"temp_password,omitempty"`
+}
+
+// RegisterRequest represents the registration request body
+type RegisterRequest struct {
+	Email    string `json:"email"`
+	Password string `json:"password"`
+}
+
+// handleRegister handles POST /auth/register
+func handleRegister(authService *auth.Service) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
+
+		var req RegisterRequest
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			http.Error(w, "Invalid request body", http.StatusBadRequest)
+			return
+		}
+
+		// Validate request
+		if req.Email == "" {
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusBadRequest)
+			json.NewEncoder(w).Encode(map[string]string{"error": "email cannot be empty"})
+			return
+		}
+		if !strings.Contains(req.Email, "@") {
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusBadRequest)
+			json.NewEncoder(w).Encode(map[string]string{"error": "invalid email format"})
+			return
+		}
+		if len(req.Password) < 8 {
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusBadRequest)
+			json.NewEncoder(w).Encode(map[string]string{"error": "password must be at least 8 characters"})
+			return
+		}
+
+		// Create the user
+		user, tempPassword, err := authService.CreateUser(r.Context(), req.Email, req.Password)
+		if err != nil {
+			log.Printf("Failed to register user: %v", err)
+
+			// Return appropriate status codes
+			if strings.Contains(err.Error(), "already exists") {
+				w.Header().Set("Content-Type", "application/json")
+				w.WriteHeader(http.StatusConflict)
+				json.NewEncoder(w).Encode(map[string]string{"error": "user with this email already exists"})
+				return
+			}
+
+			http.Error(w, "Internal server error", http.StatusInternalServerError)
+			return
+		}
+
+		// Return user with optional temp password (shouldn't happen for registration)
+		response := CreateUserResponse{
+			ID:           user.ID,
+			Email:        user.Email,
+			IsAdmin:      user.IsAdmin,
+			CreatedAt:    user.CreatedAt,
+			TempPassword: tempPassword,
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusCreated)
+		json.NewEncoder(w).Encode(response)
+	}
 }
 
 // handleLogin handles POST /auth/login
@@ -115,6 +195,7 @@ func handleLogin(authService *auth.Service, accessTTL time.Duration, secureCooki
 		json.NewEncoder(w).Encode(UserProfile{
 			ID:        user.ID,
 			Email:     user.Email,
+			IsAdmin:   user.IsAdmin,
 			CreatedAt: user.CreatedAt,
 		})
 	}
@@ -156,6 +237,7 @@ func handleMe() http.HandlerFunc {
 		json.NewEncoder(w).Encode(UserProfile{
 			ID:        user.ID,
 			Email:     user.Email,
+			IsAdmin:   user.IsAdmin,
 			CreatedAt: user.CreatedAt,
 		})
 	}
@@ -222,6 +304,59 @@ func handleResetPassword(authService *auth.Service) http.HandlerFunc {
 	}
 }
 
+// handleChangePassword handles POST /auth/change-password (requires authentication)
+func handleChangePassword(authService *auth.Service) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
+
+		// Get user from context (set by RequireAuth middleware)
+		user, ok := auth.GetUserFromContext(r.Context())
+		if !ok {
+			http.Error(w, "Unauthorized", http.StatusUnauthorized)
+			return
+		}
+
+		var req ChangePasswordRequest
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			http.Error(w, "Invalid request body", http.StatusBadRequest)
+			return
+		}
+
+		// Change the password
+		err := authService.ChangePassword(r.Context(), user.ID, req.CurrentPassword, req.NewPassword)
+		if err != nil {
+			log.Printf("Password change failed for user %d: %v", user.ID, err)
+
+			// Map errors to appropriate HTTP status codes
+			errMsg := err.Error()
+			if strings.Contains(errMsg, "current password is incorrect") {
+				http.Error(w, "Current password is incorrect", http.StatusUnauthorized)
+				return
+			}
+			if strings.Contains(errMsg, "must be at least 8 characters") {
+				http.Error(w, "New password must be at least 8 characters long", http.StatusBadRequest)
+				return
+			}
+			if strings.Contains(errMsg, "user not found") {
+				http.Error(w, "User not found", http.StatusNotFound)
+				return
+			}
+
+			// Generic error for other cases
+			http.Error(w, "Failed to change password", http.StatusBadRequest)
+			return
+		}
+
+		log.Printf("Password successfully changed for user %d", user.ID)
+
+		// Return 204 No Content on success
+		w.WriteHeader(http.StatusNoContent)
+	}
+}
+
 // handleListUsers handles GET /auth/users
 func handleListUsers(authService *auth.Service) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
@@ -244,6 +379,7 @@ func handleListUsers(authService *auth.Service) http.HandlerFunc {
 			profiles[i] = UserProfile{
 				ID:        user.ID,
 				Email:     user.Email,
+				IsAdmin:   user.IsAdmin,
 				CreatedAt: user.CreatedAt,
 			}
 		}
@@ -295,6 +431,7 @@ func handleCreateUser(authService *auth.Service) http.HandlerFunc {
 		response := CreateUserResponse{
 			ID:           user.ID,
 			Email:        user.Email,
+			IsAdmin:      user.IsAdmin,
 			CreatedAt:    user.CreatedAt,
 			TempPassword: tempPassword,
 		}
@@ -341,7 +478,7 @@ func handleDeleteUser(authService *auth.Service) http.HandlerFunc {
 
 			// Return appropriate status codes
 			if strings.Contains(err.Error(), "cannot delete your own account") ||
-				strings.Contains(err.Error(), "cannot delete the last remaining user") {
+				strings.Contains(err.Error(), "cannot delete the last admin") {
 				w.Header().Set("Content-Type", "application/json")
 				w.WriteHeader(http.StatusForbidden)
 				json.NewEncoder(w).Encode(map[string]string{"error": err.Error()})
@@ -465,6 +602,7 @@ func newServer(collector metrics.Collector, startTime time.Time, authService *au
 	})
 
 	// Register auth handlers (public endpoints)
+	mux.HandleFunc("/auth/register", handleRegister(authService))
 	mux.HandleFunc("/auth/login", handleLogin(authService, accessTTL, secureCookie))
 	mux.HandleFunc("/auth/logout", handleLogout(secureCookie))
 	mux.HandleFunc("/auth/forgot-password", handleForgotPassword(authService, passwordResetTTL))
@@ -472,6 +610,7 @@ func newServer(collector metrics.Collector, startTime time.Time, authService *au
 
 	// Protected auth endpoints
 	mux.Handle("/auth/me", authService.RequireAuth(handleMe()))
+	mux.Handle("/auth/change-password", authService.RequireAuth(handleChangePassword(authService)))
 
 	// User management endpoints (protected)
 	mux.Handle("/auth/users", authService.RequireAuth(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

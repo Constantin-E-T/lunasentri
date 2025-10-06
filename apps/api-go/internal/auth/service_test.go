@@ -88,12 +88,33 @@ func (m *mockStore) ListUsers(ctx context.Context) ([]storage.User, error) {
 }
 
 func (m *mockStore) DeleteUser(ctx context.Context, id int) error {
-	// Count users first
-	if len(m.users) <= 1 {
-		return fmt.Errorf("cannot delete the last user")
+	// Find the user to delete
+	var userToDelete *storage.User
+	for _, user := range m.users {
+		if user.ID == id {
+			userToDelete = user
+			break
+		}
 	}
 
-	// Find and delete user
+	if userToDelete == nil {
+		return storage.ErrUserNotFound
+	}
+
+	// If user is admin, check if they're the last admin
+	if userToDelete.IsAdmin {
+		adminCount := 0
+		for _, user := range m.users {
+			if user.IsAdmin {
+				adminCount++
+			}
+		}
+		if adminCount <= 1 {
+			return fmt.Errorf("cannot delete the last admin")
+		}
+	}
+
+	// Delete user
 	for email, user := range m.users {
 		if user.ID == id {
 			delete(m.users, email)
@@ -101,6 +122,24 @@ func (m *mockStore) DeleteUser(ctx context.Context, id int) error {
 		}
 	}
 	return storage.ErrUserNotFound
+}
+
+func (m *mockStore) CountUsers(ctx context.Context) (int, error) {
+	return len(m.users), nil
+}
+
+func (m *mockStore) PromoteToAdmin(ctx context.Context, userID int) error {
+	for _, user := range m.users {
+		if user.ID == userID {
+			user.IsAdmin = true
+			return nil
+		}
+	}
+	return storage.ErrUserNotFound
+}
+
+func (m *mockStore) DeletePasswordResetsForUser(ctx context.Context, userID int) error {
+	return nil
 }
 
 func (m *mockStore) Close() error {
