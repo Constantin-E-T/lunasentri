@@ -1,13 +1,14 @@
 package storage
 
 import (
-	"context"
-	"database/sql"
-	"fmt"
-	"strings"
-	"time"
+    "context"
+    "database/sql"
+    "errors"
+    "fmt"
+    "strings"
+    "time"
 
-	_ "modernc.org/sqlite"
+    _ "modernc.org/sqlite"
 )
 
 // SQLiteStore implements the Store interface using SQLite
@@ -52,18 +53,33 @@ func (s *SQLiteStore) migrate() error {
 	}
 
 	// List of migrations to apply
-	migrations := []migration{
-		{
-			version: "001_create_users_table",
-			sql: `
-			CREATE TABLE IF NOT EXISTS users (
-				id INTEGER PRIMARY KEY AUTOINCREMENT,
-				email TEXT UNIQUE NOT NULL,
-				password_hash TEXT NOT NULL,
-				created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-			);`,
-		},
-	}
+    migrations := []migration{
+        {
+            version: "001_create_users_table",
+            sql: `
+            CREATE TABLE IF NOT EXISTS users (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                email TEXT UNIQUE NOT NULL,
+                password_hash TEXT NOT NULL,
+                created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+            );`,
+        },
+        {
+            version: "002_create_password_resets",
+            sql: `
+            CREATE TABLE IF NOT EXISTS password_resets (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id INTEGER NOT NULL,
+                token_hash TEXT UNIQUE NOT NULL,
+                expires_at DATETIME NOT NULL,
+                used_at DATETIME,
+                created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE
+            );
+            CREATE INDEX IF NOT EXISTS idx_password_resets_token_hash ON password_resets(token_hash);
+            `,
+        },
+    }
 
 	// Apply each migration if not already applied
 	for _, m := range migrations {
@@ -140,18 +156,18 @@ func (s *SQLiteStore) GetUserByEmail(ctx context.Context, email string) (*User, 
 	query := `SELECT id, email, password_hash, created_at FROM users WHERE email = ?`
 
 	user := &User{}
-	err := s.db.QueryRowContext(ctx, query, email).Scan(
-		&user.ID,
-		&user.Email,
-		&user.PasswordHash,
-		&user.CreatedAt,
-	)
-	if err != nil {
-		if err == sql.ErrNoRows {
-			return nil, fmt.Errorf("user with email %s not found", email)
-		}
-		return nil, fmt.Errorf("failed to get user: %w", err)
-	}
+    err := s.db.QueryRowContext(ctx, query, email).Scan(
+        &user.ID,
+        &user.Email,
+        &user.PasswordHash,
+        &user.CreatedAt,
+    )
+    if err != nil {
+        if err == sql.ErrNoRows {
+            return nil, ErrUserNotFound
+        }
+        return nil, fmt.Errorf("failed to get user: %w", err)
+    }
 
 	return user, nil
 }
@@ -161,18 +177,18 @@ func (s *SQLiteStore) GetUserByID(ctx context.Context, id int) (*User, error) {
 	query := `SELECT id, email, password_hash, created_at FROM users WHERE id = ?`
 
 	user := &User{}
-	err := s.db.QueryRowContext(ctx, query, id).Scan(
-		&user.ID,
-		&user.Email,
-		&user.PasswordHash,
-		&user.CreatedAt,
-	)
-	if err != nil {
-		if err == sql.ErrNoRows {
-			return nil, fmt.Errorf("user with id %d not found", id)
-		}
-		return nil, fmt.Errorf("failed to get user: %w", err)
-	}
+    err := s.db.QueryRowContext(ctx, query, id).Scan(
+        &user.ID,
+        &user.Email,
+        &user.PasswordHash,
+        &user.CreatedAt,
+    )
+    if err != nil {
+        if err == sql.ErrNoRows {
+            return nil, ErrUserNotFound
+        }
+        return nil, fmt.Errorf("failed to get user: %w", err)
+    }
 
 	return user, nil
 }
@@ -186,19 +202,110 @@ func (s *SQLiteStore) UpsertAdmin(ctx context.Context, email, passwordHash strin
 		if strings.Contains(err.Error(), "not found") {
 			return s.CreateUser(ctx, email, passwordHash)
 		}
-		return nil, fmt.Errorf("failed to check existing user: %w", err)
-	}
+        if errors.Is(err, ErrUserNotFound) {
+            return s.CreateUser(ctx, email, passwordHash)
+        }
+        return nil, fmt.Errorf("failed to check existing user: %w", err)
+    }
 
-	// User exists, update password hash
-	query := `UPDATE users SET password_hash = ? WHERE email = ?`
+    // User exists, update password hash
+    query := `UPDATE users SET password_hash = ? WHERE email = ?`
 	_, err = s.db.ExecContext(ctx, query, passwordHash, email)
 	if err != nil {
-		return nil, fmt.Errorf("failed to update user password: %w", err)
-	}
+        return nil, fmt.Errorf("failed to update user password: %w", err)
+    }
 
-	// Return updated user
-	existingUser.PasswordHash = passwordHash
-	return existingUser, nil
+    // Return updated user
+    existingUser.PasswordHash = passwordHash
+    return existingUser, nil
+}
+
+// UpdateUserPassword updates the password hash for a user
+func (s *SQLiteStore) UpdateUserPassword(ctx context.Context, userID int, passwordHash string) error {
+    query := `UPDATE users SET password_hash = ? WHERE id = ?`
+    res, err := s.db.ExecContext(ctx, query, passwordHash, userID)
+    if err != nil {
+        return fmt.Errorf("failed to update user password: %w", err)
+    }
+    rows, err := res.RowsAffected()
+    if err != nil {
+        return fmt.Errorf("failed to verify password update: %w", err)
+    }
+    if rows == 0 {
+        return ErrUserNotFound
+    }
+    return nil
+}
+
+// CreatePasswordReset creates a password reset entry for a user
+func (s *SQLiteStore) CreatePasswordReset(ctx context.Context, userID int, tokenHash string, expiresAt time.Time) (*PasswordReset, error) {
+    query := `
+    INSERT INTO password_resets (user_id, token_hash, expires_at)
+    VALUES (?, ?, ?)
+    RETURNING id, user_id, token_hash, expires_at, used_at, created_at`
+
+    var pr PasswordReset
+    err := s.db.QueryRowContext(ctx, query, userID, tokenHash, expiresAt).Scan(
+        &pr.ID,
+        &pr.UserID,
+        &pr.TokenHash,
+        &pr.ExpiresAt,
+        &pr.UsedAt,
+        &pr.CreatedAt,
+    )
+    if err != nil {
+        return nil, fmt.Errorf("failed to create password reset: %w", err)
+    }
+
+    return &pr, nil
+}
+
+// GetPasswordResetByHash retrieves an active password reset entry by token hash
+func (s *SQLiteStore) GetPasswordResetByHash(ctx context.Context, tokenHash string) (*PasswordReset, error) {
+    query := `
+    SELECT id, user_id, token_hash, expires_at, used_at, created_at
+    FROM password_resets
+    WHERE token_hash = ?`
+
+    var pr PasswordReset
+    err := s.db.QueryRowContext(ctx, query, tokenHash).Scan(
+        &pr.ID,
+        &pr.UserID,
+        &pr.TokenHash,
+        &pr.ExpiresAt,
+        &pr.UsedAt,
+        &pr.CreatedAt,
+    )
+    if err != nil {
+        if err == sql.ErrNoRows {
+            return nil, ErrPasswordResetNotFound
+        }
+        return nil, fmt.Errorf("failed to get password reset: %w", err)
+    }
+
+    if pr.UsedAt != nil || time.Now().After(pr.ExpiresAt) {
+        return nil, ErrPasswordResetNotFound
+    }
+
+    return &pr, nil
+}
+
+// MarkPasswordResetUsed marks a password reset entry as used
+func (s *SQLiteStore) MarkPasswordResetUsed(ctx context.Context, id int) error {
+    now := time.Now()
+    query := `UPDATE password_resets SET used_at = ? WHERE id = ?`
+    res, err := s.db.ExecContext(ctx, query, now, id)
+    if err != nil {
+        return fmt.Errorf("failed to mark password reset used: %w", err)
+    }
+    rows, err := res.RowsAffected()
+    if err != nil {
+        return fmt.Errorf("failed to verify password reset update: %w", err)
+    }
+    if rows == 0 {
+        return ErrPasswordResetNotFound
+    }
+    return nil
 }
 
 // Close closes the database connection

@@ -50,6 +50,34 @@ func (m *mockStore) UpsertAdmin(ctx context.Context, email, passwordHash string)
 	return m.CreateUser(ctx, email, passwordHash)
 }
 
+func (m *mockStore) UpdateUserPassword(ctx context.Context, userID int, passwordHash string) error {
+	for _, user := range m.users {
+		if user.ID == userID {
+			user.PasswordHash = passwordHash
+			return nil
+		}
+	}
+	return storage.ErrUserNotFound
+}
+
+func (m *mockStore) CreatePasswordReset(ctx context.Context, userID int, tokenHash string, expiresAt time.Time) (*storage.PasswordReset, error) {
+	return &storage.PasswordReset{
+		ID:        1,
+		UserID:    userID,
+		TokenHash: tokenHash,
+		ExpiresAt: expiresAt,
+		CreatedAt: time.Now(),
+	}, nil
+}
+
+func (m *mockStore) GetPasswordResetByHash(ctx context.Context, tokenHash string) (*storage.PasswordReset, error) {
+	return nil, storage.ErrPasswordResetNotFound
+}
+
+func (m *mockStore) MarkPasswordResetUsed(ctx context.Context, id int) error {
+	return nil
+}
+
 func (m *mockStore) Close() error {
 	return nil
 }

@@ -40,6 +40,22 @@ type LoginRequest struct {
 	Password string `json:"password"`
 }
 
+// ForgotPasswordRequest represents the forgot password request body
+type ForgotPasswordRequest struct {
+	Email string `json:"email"`
+}
+
+// ForgotPasswordResponse represents the forgot password response
+type ForgotPasswordResponse struct {
+	ResetToken string `json:"reset_token"`
+}
+
+// ResetPasswordRequest represents the reset password request body
+type ResetPasswordRequest struct {
+	Token    string `json:"token"`
+	Password string `json:"password"`
+}
+
 // UserProfile represents the user profile response
 type UserProfile struct {
 	ID    int    `json:"id"`
@@ -124,6 +140,67 @@ func handleMe() http.HandlerFunc {
 			ID:    user.ID,
 			Email: user.Email,
 		})
+	}
+}
+
+// handleForgotPassword handles POST /auth/forgot-password
+func handleForgotPassword(authService *auth.Service, passwordResetTTL time.Duration) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
+
+		var req ForgotPasswordRequest
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			http.Error(w, "Invalid request body", http.StatusBadRequest)
+			return
+		}
+
+		// Generate password reset token
+		token, err := authService.GeneratePasswordReset(r.Context(), req.Email, passwordResetTTL)
+		if err != nil {
+			log.Printf("Failed to generate password reset: %v", err)
+			// Still return 202 to avoid leaking user existence
+		}
+
+		// Log the token to stdout for manual testing (dev mode)
+		log.Printf("Password reset token for %s: %s", req.Email, token)
+
+		// Return token in response (for development)
+		// TODO: In production, send via email instead
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusAccepted)
+		json.NewEncoder(w).Encode(ForgotPasswordResponse{
+			ResetToken: token,
+		})
+	}
+}
+
+// handleResetPassword handles POST /auth/reset-password
+func handleResetPassword(authService *auth.Service) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
+
+		var req ResetPasswordRequest
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			http.Error(w, "Invalid request body", http.StatusBadRequest)
+			return
+		}
+
+		// Reset the password
+		err := authService.ResetPassword(r.Context(), req.Token, req.Password)
+		if err != nil {
+			log.Printf("Password reset failed: %v", err)
+			http.Error(w, "Invalid or expired reset token", http.StatusBadRequest)
+			return
+		}
+
+		// Return 204 No Content on success
+		w.WriteHeader(http.StatusNoContent)
 	}
 }
 
@@ -214,7 +291,7 @@ func handleWebSocket(collector metrics.Collector, startTime time.Time) http.Hand
 }
 
 // newServer creates a new HTTP server with the given collector and auth service
-func newServer(collector metrics.Collector, startTime time.Time, authService *auth.Service, accessTTL time.Duration, secureCookie bool) *http.ServeMux {
+func newServer(collector metrics.Collector, startTime time.Time, authService *auth.Service, accessTTL time.Duration, passwordResetTTL time.Duration, secureCookie bool) *http.ServeMux {
 	// Create a new ServeMux
 	mux := http.NewServeMux()
 
@@ -228,9 +305,13 @@ func newServer(collector metrics.Collector, startTime time.Time, authService *au
 		fmt.Fprintf(w, `{"status":"healthy"}`)
 	})
 
-	// Register auth handlers
+	// Register auth handlers (public endpoints)
 	mux.HandleFunc("/auth/login", handleLogin(authService, accessTTL, secureCookie))
 	mux.HandleFunc("/auth/logout", handleLogout(secureCookie))
+	mux.HandleFunc("/auth/forgot-password", handleForgotPassword(authService, passwordResetTTL))
+	mux.HandleFunc("/auth/reset-password", handleResetPassword(authService))
+
+	// Protected auth endpoints
 	mux.Handle("/auth/me", authService.RequireAuth(handleMe()))
 
 	// Register protected handlers (require authentication)
@@ -335,13 +416,23 @@ func main() {
 		}
 	}
 
+	// Get password reset TTL from environment variable, default to 1 hour
+	passwordResetTTL := 1 * time.Hour
+	if ttlStr := os.Getenv("PASSWORD_RESET_TTL"); ttlStr != "" {
+		if parsedTTL, err := time.ParseDuration(ttlStr); err == nil {
+			passwordResetTTL = parsedTTL
+		} else {
+			log.Printf("Warning: Invalid PASSWORD_RESET_TTL value '%s', using default 1h", ttlStr)
+		}
+	}
+
 	// Initialize auth service
 	authService, err := auth.NewService(store, jwtSecret, accessTTL)
 	if err != nil {
 		log.Fatalf("Failed to initialize auth service: %v", err)
 	}
 
-	log.Printf("Auth service initialized (access token TTL: %v)", accessTTL)
+	log.Printf("Auth service initialized (access token TTL: %v, password reset TTL: %v)", accessTTL, passwordResetTTL)
 
 	// Get secure cookie setting from environment variable, default to true for production
 	secureCookie := true
@@ -354,7 +445,7 @@ func main() {
 	metricsCollector := metrics.NewSystemCollector()
 
 	// Create server with real collector and auth service
-	mux := newServer(metricsCollector, serverStartTime, authService, accessTTL, secureCookie)
+	mux := newServer(metricsCollector, serverStartTime, authService, accessTTL, passwordResetTTL, secureCookie)
 
 	// Create HTTP server with CORS middleware
 	port := "8080"

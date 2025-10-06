@@ -42,6 +42,9 @@ export SECURE_COOKIE=false
 # Optional: Access token time-to-live (default: 15m)
 export ACCESS_TOKEN_TTL=15m
 
+# Optional: Password reset token time-to-live (default: 1h)
+export PASSWORD_RESET_TTL=1h
+
 # Optional: Set allowed CORS origin (defaults to http://localhost:3000)
 export CORS_ALLOWED_ORIGIN=http://localhost:3000
 
@@ -208,6 +211,8 @@ pnpm start
 - `GET /health` - Health check endpoint (returns `{"status":"healthy"}`)
 - `POST /auth/login` - Login with credentials (sets session cookie)
 - `POST /auth/logout` - Logout (clears session cookie)
+- `POST /auth/forgot-password` - Request password reset token
+- `POST /auth/reset-password` - Reset password using token
 
 #### Protected Endpoints (require authentication)
 
@@ -251,6 +256,66 @@ curl http://localhost:8080/auth/me \
 
 # Response: {"id":1,"email":"admin@yourdomain.com"}
 ```
+
+**POST /auth/forgot-password**
+
+Request a password reset token. Always returns 202 Accepted (doesn't reveal if user exists). In development, the reset token is returned in the response and logged to stdout. In production, this would be sent via email.
+
+```bash
+curl -X POST http://localhost:8080/auth/forgot-password \
+  -H "Content-Type: application/json" \
+  -d '{"email":"admin@yourdomain.com"}'
+
+# Response (dev only): {"reset_token":"base64-encoded-token-here"}
+# Status: 202 Accepted
+```
+
+**POST /auth/reset-password**
+
+Reset password using a valid reset token. Token must not be expired or previously used.
+
+```bash
+curl -X POST http://localhost:8080/auth/reset-password \
+  -H "Content-Type: application/json" \
+  -d '{"token":"your-reset-token","password":"newpassword123"}'
+
+# Response: 204 No Content (success)
+# Or 400 Bad Request with error message
+```
+
+**Password Reset Flow (Development):**
+
+1. Request reset token:
+   ```bash
+   curl -X POST http://localhost:8080/auth/forgot-password \
+     -H "Content-Type: application/json" \
+     -d '{"email":"admin@yourdomain.com"}'
+   ```
+
+2. Copy the `reset_token` from the response (also logged in server output)
+
+3. Reset password with the token:
+   ```bash
+   curl -X POST http://localhost:8080/auth/reset-password \
+     -H "Content-Type: application/json" \
+     -d '{"token":"<token-from-step-1>","password":"mynewpassword"}'
+   ```
+
+4. Login with new password:
+   ```bash
+   curl -X POST http://localhost:8080/auth/login \
+     -H "Content-Type: application/json" \
+     -d '{"email":"admin@yourdomain.com","password":"mynewpassword"}' \
+     -c cookies.txt
+   ```
+
+**Password Reset Security:**
+- Tokens expire after `PASSWORD_RESET_TTL` (default: 1 hour)
+- Tokens are hashed before storage (SHA256)
+- Tokens can only be used once
+- Endpoint doesn't reveal whether email exists (timing-safe)
+- Password must be at least 8 characters
+- Old password stops working immediately after reset
 
 **Frontend Usage:**
 
@@ -381,6 +446,7 @@ docker run -p 3000:3000 lunasentri-web
 | `AUTH_JWT_SECRET` | **Yes** | - | Secret key for JWT token signing (32+ characters recommended) |
 | `SECURE_COOKIE` | **Yes for dev** | `true` | Set to `false` for local HTTP development, `true` for production HTTPS |
 | `ACCESS_TOKEN_TTL` | No | `15m` | Session token lifetime (Go duration format: `15m`, `1h`, `24h`) |
+| `PASSWORD_RESET_TTL` | No | `1h` | Password reset token lifetime (Go duration format: `30m`, `1h`, `2h`) |
 | `CORS_ALLOWED_ORIGIN` | No | `http://localhost:3000` | Allowed CORS origin for API requests |
 | `DB_PATH` | No | `./data/lunasentri.db` | Path to SQLite database file (directory will be created if needed) |
 | `ADMIN_EMAIL` | No | - | Admin user email for bootstrap (requires `ADMIN_PASSWORD`) |
