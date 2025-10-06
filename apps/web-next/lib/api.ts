@@ -161,3 +161,29 @@ export async function deleteUser(id: number): Promise<void> {
     throw new Error(message);
   }
 }
+
+export async function changePassword(currentPassword: string, newPassword: string): Promise<void> {
+  const response = await fetch(`${API_URL}/auth/change-password`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    credentials: 'include', // Include cookies for authentication
+    body: JSON.stringify({ current_password: currentPassword, new_password: newPassword }),
+  });
+
+  if (!response.ok) {
+    const errorData = await response.json().catch(() => null);
+    let message: string;
+    
+    if (response.status === 401) {
+      message = errorData?.error || 'Current password is incorrect';
+    } else if (response.status === 400) {
+      message = errorData?.error || 'New password does not meet requirements';
+    } else {
+      message = errorData?.error || `Failed to change password: ${response.status} ${response.statusText}`;
+    }
+    
+    throw new Error(message);
+  }
+}

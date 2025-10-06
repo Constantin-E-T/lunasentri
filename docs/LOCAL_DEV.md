@@ -157,6 +157,16 @@ The web interface will be available at `http://localhost:3000`
   - Confirm deletion in dialog
   - Cannot delete your own account or the last remaining user
 
+**Settings**:
+
+- Click "Settings" link in dashboard header to access `/settings` page (available to all authenticated users)
+- **Change Password**:
+  - Enter current password for verification
+  - Enter new password (8+ characters, different from current)
+  - Confirm new password
+  - On success, password is updated and user remains logged in
+  - Common errors: incorrect current password, weak new password, password mismatch
+
 **Troubleshooting Authentication**:
 
 - **"Invalid email or password"**: Check that `ADMIN_EMAIL` and `ADMIN_PASSWORD` match what you're entering

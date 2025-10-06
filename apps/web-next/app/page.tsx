@@ -49,6 +49,12 @@ export default function Home() {
                 Manage Users
               </Link>
             )}
+            <Link
+              href="/settings"
+              className="text-sm text-slate-300 hover:text-white transition-colors"
+            >
+              Settings
+            </Link>
             <span className="text-sm text-slate-400">{user?.email}</span>
             <button
               onClick={logout}

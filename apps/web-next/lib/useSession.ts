@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState, useCallback } from 'react';
-import { fetchCurrentUser, login as apiLogin, logout as apiLogout, register as apiRegister, type User } from './api';
+import { fetchCurrentUser, login as apiLogin, logout as apiLogout, register as apiRegister, changePassword as apiChangePassword, type User } from './api';
 
 export type SessionStatus = 'loading' | 'authenticated' | 'unauthenticated';
 
@@ -10,6 +10,7 @@ export interface Session {
   status: SessionStatus;
   login: (email: string, password: string) => Promise<void>;
   register: (email: string, password: string) => Promise<void>;
+  changePassword: (currentPassword: string, newPassword: string) => Promise<void>;
   logout: () => Promise<void>;
 }
 
@@ -79,11 +80,22 @@ export function useSession(): Session {
     }
   }, []);
 
+  const changePassword = useCallback(async (currentPassword: string, newPassword: string) => {
+    try {
+      await apiChangePassword(currentPassword, newPassword);
+      // Password change successful - keep user logged in
+      // Session remains valid, no need to update user state
+    } catch (error) {
+      throw error; // Re-throw so caller can handle error display
+    }
+  }, []);
+
   return {
     user,
     status,
     login,
     register,
+    changePassword,
     logout,
   };
 }

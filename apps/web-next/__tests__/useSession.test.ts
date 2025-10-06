@@ -11,6 +11,7 @@ jest.mock('@/lib/api', () => ({
     login: jest.fn(),
     logout: jest.fn(),
     register: jest.fn(),
+    changePassword: jest.fn(),
 }));
 
 describe('useSession', () => {
@@ -25,6 +26,7 @@ describe('useSession', () => {
         expect(result.current).toHaveProperty('status');
         expect(result.current).toHaveProperty('login');
         expect(result.current).toHaveProperty('register');
+        expect(result.current).toHaveProperty('changePassword');
         expect(result.current).toHaveProperty('logout');
 
         // Initial state should be loading
@@ -34,20 +36,23 @@ describe('useSession', () => {
         // Functions should be callable without throwing
         expect(typeof result.current.login).toBe('function');
         expect(typeof result.current.register).toBe('function');
+        expect(typeof result.current.changePassword).toBe('function');
         expect(typeof result.current.logout).toBe('function');
     });
 
-    test('exposes login, register, and logout functions', () => {
+    test('exposes login, register, changePassword, and logout functions', () => {
         const { result } = renderHook(() => useSession());
 
         // All session functions should be present
         expect(result.current.login).toBeDefined();
         expect(result.current.register).toBeDefined();
+        expect(result.current.changePassword).toBeDefined();
         expect(result.current.logout).toBeDefined();
 
         // They should be functions
         expect(typeof result.current.login).toBe('function');
         expect(typeof result.current.register).toBe('function');
+        expect(typeof result.current.changePassword).toBe('function');
         expect(typeof result.current.logout).toBe('function');
     });
 });
