@@ -22,6 +22,31 @@ type Metrics struct {
 
 var serverStartTime time.Time
 
+// corsMiddleware adds CORS headers and handles preflight requests
+func corsMiddleware(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// Get allowed origin from environment variable, default to localhost:3000
+		allowedOrigin := os.Getenv("CORS_ALLOWED_ORIGIN")
+		if allowedOrigin == "" {
+			allowedOrigin = "http://localhost:3000"
+		}
+
+		// Set CORS headers
+		w.Header().Set("Access-Control-Allow-Origin", allowedOrigin)
+		w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
+		w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization, X-Requested-With")
+
+		// Handle preflight OPTIONS requests
+		if r.Method == "OPTIONS" {
+			w.WriteHeader(http.StatusNoContent)
+			return
+		}
+
+		// Continue to next handler
+		next.ServeHTTP(w, r)
+	})
+}
+
 func main() {
 	// Record server start time for uptime calculation
 	serverStartTime = time.Now()
@@ -59,16 +84,20 @@ func main() {
 		}
 	})
 
-	// Create HTTP server
+	// Create HTTP server with CORS middleware
 	port := "8080"
 	server := &http.Server{
 		Addr:    ":" + port,
-		Handler: mux,
+		Handler: corsMiddleware(mux),
 	}
 
 	// Start server in a goroutine
 	go func() {
-		log.Printf("LunaSentri API starting on port %s (endpoints: /, /health, /metrics)...", port)
+		allowedOrigin := os.Getenv("CORS_ALLOWED_ORIGIN")
+		if allowedOrigin == "" {
+			allowedOrigin = "http://localhost:3000"
+		}
+		log.Printf("LunaSentri API starting on port %s (endpoints: /, /health, /metrics) with CORS origin: %s", port, allowedOrigin)
 		if err := server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 			log.Fatalf("Server failed to start: %v", err)
 		}
