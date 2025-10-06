@@ -1,10 +1,10 @@
-'use client';
+"use client";
 
-import { useEffect } from 'react';
-import { useRouter } from 'next/navigation';
-import Link from 'next/link';
-import { MetricsCard } from '@/components/MetricsCard';
-import { useSession } from '@/lib/useSession';
+import { useEffect } from "react";
+import { useRouter } from "next/navigation";
+import Link from "next/link";
+import { MetricsCard } from "@/components/MetricsCard";
+import { useSession } from "@/lib/useSession";
 
 export default function Home() {
   const router = useRouter();
@@ -12,13 +12,13 @@ export default function Home() {
 
   // Redirect to login if unauthenticated
   useEffect(() => {
-    if (status === 'unauthenticated') {
-      router.push('/login');
+    if (status === "unauthenticated") {
+      router.push("/login");
     }
   }, [status, router]);
 
   // Show loading state while checking authentication
-  if (status === 'loading') {
+  if (status === "loading") {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-900 to-slate-800">
         <div className="text-slate-400">Loading...</div>
@@ -27,7 +27,7 @@ export default function Home() {
   }
 
   // Don't render dashboard if not authenticated (will redirect)
-  if (status !== 'authenticated') {
+  if (status !== "authenticated") {
     return null;
   }
 
@@ -49,9 +49,7 @@ export default function Home() {
                 Manage Users
               </Link>
             )}
-            <span className="text-sm text-slate-400">
-              {user?.email}
-            </span>
+            <span className="text-sm text-slate-400">{user?.email}</span>
             <button
               onClick={logout}
               className="text-sm text-slate-300 hover:text-white bg-slate-700/50 hover:bg-slate-700 px-4 py-2 rounded-lg transition-colors"
@@ -65,9 +63,7 @@ export default function Home() {
       {/* Dashboard Content */}
       <div className="flex items-center justify-center min-h-[calc(100vh-73px)]">
         <div className="text-center px-4">
-          <h1 className="text-6xl font-bold text-white mb-4">
-            🌙 LunaSentri
-          </h1>
+          <h1 className="text-6xl font-bold text-white mb-4">🌙 LunaSentri</h1>
           <p className="text-xl text-slate-300 mb-8">
             Lightweight Server Monitoring Dashboard
           </p>

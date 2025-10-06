@@ -1,43 +1,43 @@
-'use client';
+"use client";
 
-import { useState, FormEvent, useEffect } from 'react';
-import { useRouter } from 'next/navigation';
-import Link from 'next/link';
-import { useSession } from '@/lib/useSession';
+import { useState, FormEvent, useEffect } from "react";
+import { useRouter } from "next/navigation";
+import Link from "next/link";
+import { useSession } from "@/lib/useSession";
 
 export default function LoginPage() {
   const router = useRouter();
   const { status, login } = useSession();
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
-  const [error, setError] = useState('');
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [error, setError] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   // Redirect if already authenticated
   useEffect(() => {
-    if (status === 'authenticated') {
-      router.push('/');
+    if (status === "authenticated") {
+      router.push("/");
     }
   }, [status, router]);
 
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
-    setError('');
+    setError("");
     setIsSubmitting(true);
 
     try {
       await login(email, password);
       // Redirect happens via useEffect when status changes to 'authenticated'
-      router.push('/');
+      router.push("/");
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Login failed');
+      setError(err instanceof Error ? err.message : "Login failed");
     } finally {
       setIsSubmitting(false);
     }
   }
 
   // Show loading state while checking authentication
-  if (status === 'loading') {
+  if (status === "loading") {
     return (
       <div className="min-h-screen bg-gradient-to-br from-slate-900 to-slate-800 flex items-center justify-center p-4">
         <div className="text-slate-400">Loading...</div>
@@ -46,7 +46,7 @@ export default function LoginPage() {
   }
 
   // Don't show login form if already authenticated (will redirect)
-  if (status === 'authenticated') {
+  if (status === "authenticated") {
     return null;
   }
 
@@ -55,9 +55,7 @@ export default function LoginPage() {
       <div className="w-full max-w-md">
         {/* Header */}
         <div className="text-center mb-8">
-          <h1 className="text-4xl font-bold text-white mb-2">
-            🌙 LunaSentri
-          </h1>
+          <h1 className="text-4xl font-bold text-white mb-2">🌙 LunaSentri</h1>
           <p className="text-slate-400">Sign in to your dashboard</p>
         </div>
 
@@ -66,7 +64,10 @@ export default function LoginPage() {
           <form onSubmit={handleSubmit} className="space-y-6">
             {/* Email Field */}
             <div>
-              <label htmlFor="email" className="block text-sm font-medium text-slate-300 mb-2">
+              <label
+                htmlFor="email"
+                className="block text-sm font-medium text-slate-300 mb-2"
+              >
                 Email
               </label>
               <input
@@ -84,7 +85,10 @@ export default function LoginPage() {
 
             {/* Password Field */}
             <div>
-              <label htmlFor="password" className="block text-sm font-medium text-slate-300 mb-2">
+              <label
+                htmlFor="password"
+                className="block text-sm font-medium text-slate-300 mb-2"
+              >
                 Password
               </label>
               <input
@@ -113,19 +117,20 @@ export default function LoginPage() {
               disabled={isSubmitting}
               className="w-full bg-blue-600 hover:bg-blue-700 disabled:bg-slate-700 disabled:cursor-not-allowed text-white font-medium py-3 px-4 rounded-lg transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 focus:ring-offset-slate-800"
             >
-              {isSubmitting ? 'Signing in...' : 'Sign in'}
+              {isSubmitting ? "Signing in..." : "Sign in"}
             </button>
           </form>
 
           {/* Helper Text */}
           <div className="mt-6 pt-6 border-t border-slate-700/50">
             <p className="text-xs text-slate-500 text-center mb-4">
-              Use the credentials set via ADMIN_EMAIL and ADMIN_PASSWORD environment variables
+              Use the credentials set via ADMIN_EMAIL and ADMIN_PASSWORD
+              environment variables
             </p>
             <p className="text-sm text-slate-400 text-center">
-              Don't have an account?{' '}
-              <Link 
-                href="/register" 
+              Don't have an account?{" "}
+              <Link
+                href="/register"
                 className="text-blue-400 hover:text-blue-300 transition-colors"
               >
                 Create account

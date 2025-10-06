@@ -124,12 +124,14 @@ The web interface will be available at `http://localhost:3000`
 6. Metrics should auto-update in real-time via WebSocket or polling every 5 seconds
 
 **Login Flow**:
+
 - First visit: → Redirected to `/login`
 - Enter credentials → Session cookie set
 - Redirected to dashboard `/`
 - Logout button in header clears session
 
 **Registration Flow**:
+
 - Navigate to `/register` or click "Create account" link from login page
 - Enter email, password (8+ characters), and confirm password
 - Client-side validation ensures passwords match and meet requirements
@@ -142,6 +144,7 @@ The web interface will be available at `http://localhost:3000`
 - Admin users see "Manage Users" link in dashboard header; regular users don't
 
 **Manage Users**:
+
 - Click "Manage Users" link in dashboard header to access `/users` page
 - **List Users**: View all users with email and creation date
 - **Add User**:
@@ -272,11 +275,13 @@ curl -X POST http://localhost:8080/auth/register \
 ```
 
 **Registration Validation:**
+
 - Email: Must be non-empty and contain `@`
 - Password: Must be at least 8 characters long
 - Duplicate emails return 409 Conflict
 
 **First User Admin Promotion:**
+
 - The first user to register automatically receives admin privileges
 - This ensures the system always has at least one administrator
 - Subsequent users are created as regular users (non-admin)
@@ -345,6 +350,7 @@ curl -X POST http://localhost:8080/auth/reset-password \
 **Password Reset Flow (Development):**
 
 1. Request reset token:
+
    ```bash
    curl -X POST http://localhost:8080/auth/forgot-password \
      -H "Content-Type: application/json" \
@@ -354,6 +360,7 @@ curl -X POST http://localhost:8080/auth/reset-password \
 2. Copy the `reset_token` from the response (also logged in server output)
 
 3. Reset password with the token:
+
    ```bash
    curl -X POST http://localhost:8080/auth/reset-password \
      -H "Content-Type: application/json" \
@@ -361,6 +368,7 @@ curl -X POST http://localhost:8080/auth/reset-password \
    ```
 
 4. Login with new password:
+
    ```bash
    curl -X POST http://localhost:8080/auth/login \
      -H "Content-Type: application/json" \
@@ -369,6 +377,7 @@ curl -X POST http://localhost:8080/auth/reset-password \
    ```
 
 **Password Reset Security:**
+
 - Tokens expire after `PASSWORD_RESET_TTL` (default: 1 hour)
 - Tokens are hashed before storage (SHA256)
 - Tokens can only be used once
@@ -399,6 +408,7 @@ curl -X POST http://localhost:8080/auth/change-password \
 ```
 
 **Password Change Requirements:**
+
 - User must be logged in (valid session cookie)
 - Must provide correct current password
 - New password must be at least 8 characters
@@ -406,11 +416,13 @@ curl -X POST http://localhost:8080/auth/change-password \
 - Outstanding password reset tokens are automatically invalidated
 
 **Error Responses:**
+
 - `400 Bad Request`: Invalid request body or weak new password
 - `401 Unauthorized`: Incorrect current password
 - `404 Not Found`: User account not found (rare edge case)
 
 **Security Notes:**
+
 - Self-service: Users can change their own password without admin intervention
 - Verifies current password before allowing change (prevents unauthorized password changes if session is compromised)
 - New password is hashed with bcrypt (cost 12) before storage
@@ -421,6 +433,7 @@ curl -X POST http://localhost:8080/auth/change-password \
 **Complete Change Password Flow:**
 
 1. Login with current credentials:
+
    ```bash
    curl -X POST http://localhost:8080/auth/login \
      -H "Content-Type: application/json" \
@@ -429,6 +442,7 @@ curl -X POST http://localhost:8080/auth/change-password \
    ```
 
 2. Change password:
+
    ```bash
    curl -X POST http://localhost:8080/auth/change-password \
      -H "Content-Type: application/json" \
@@ -437,6 +451,7 @@ curl -X POST http://localhost:8080/auth/change-password \
    ```
 
 3. Verify old password no longer works:
+
    ```bash
    curl -X POST http://localhost:8080/auth/login \
      -H "Content-Type: application/json" \
@@ -445,6 +460,7 @@ curl -X POST http://localhost:8080/auth/change-password \
    ```
 
 4. Login with new password:
+
    ```bash
    curl -X POST http://localhost:8080/auth/login \
      -H "Content-Type: application/json" \
@@ -498,6 +514,7 @@ curl -b cookies.txt -X DELETE http://localhost:8080/auth/users/2
 ```
 
 **User Management Notes:**
+
 - First user can register via `/auth/register` and becomes admin automatically
 - Initial admin user can also be created from `ADMIN_EMAIL` and `ADMIN_PASSWORD` environment variables
 - Additional users can be created via public registration or by authenticated users via the API

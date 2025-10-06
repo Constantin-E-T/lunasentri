@@ -49,7 +49,7 @@ export function useSession(): Session {
     try {
       // Register the user
       const registeredUser = await apiRegister(email, password);
-      
+
       // After successful registration, try to log them in automatically
       // by fetching the current user (registration endpoint should set session cookie)
       try {
