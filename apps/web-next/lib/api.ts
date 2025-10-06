@@ -175,7 +175,7 @@ export async function changePassword(currentPassword: string, newPassword: strin
   if (!response.ok) {
     const errorData = await response.json().catch(() => null);
     let message: string;
-    
+
     if (response.status === 401) {
       message = errorData?.error || 'Current password is incorrect';
     } else if (response.status === 400) {
@@ -183,7 +183,7 @@ export async function changePassword(currentPassword: string, newPassword: strin
     } else {
       message = errorData?.error || `Failed to change password: ${response.status} ${response.statusText}`;
     }
-    
+
     throw new Error(message);
   }
 }
