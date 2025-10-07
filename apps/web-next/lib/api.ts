@@ -72,63 +72,91 @@ export interface LoginRequest {
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8080';
 
-export async function fetchMetrics(): Promise<Metrics> {
-  const response = await fetch(`${API_URL}/metrics`, {
-    method: 'GET',
+/**
+ * Centralized request helper that handles authentication errors.
+ * Dispatches a 'session-expired' event on 401/403 responses.
+ */
+async function request<T>(input: RequestInfo | URL, init?: RequestInit): Promise<T> {
+  const response = await fetch(input, {
+    ...init,
+    credentials: 'include', // Always include cookies for authentication
     headers: {
       'Content-Type': 'application/json',
+      ...init?.headers,
     },
-    credentials: 'include', // Include cookies for authentication
   });
 
+  // Handle authentication errors
+  if (response.status === 401 || response.status === 403) {
+    // Dispatch session expired event for useSession to handle
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('session-expired'));
+    }
+    throw new Error('Session expired');
+  }
+
   if (!response.ok) {
-    throw new Error(`Failed to fetch metrics: ${response.status} ${response.statusText}`);
+    throw new Error(`Request failed: ${response.status} ${response.statusText}`);
   }
 
   return response.json();
+}
+
+/**
+ * Request helper for endpoints that don't return JSON content.
+ */
+async function requestVoid(input: RequestInfo | URL, init?: RequestInit): Promise<void> {
+  const response = await fetch(input, {
+    ...init,
+    credentials: 'include', // Always include cookies for authentication
+    headers: {
+      'Content-Type': 'application/json',
+      ...init?.headers,
+    },
+  });
+
+  // Handle authentication errors
+  if (response.status === 401 || response.status === 403) {
+    // Dispatch session expired event for useSession to handle
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('session-expired'));
+    }
+    throw new Error('Session expired');
+  }
+
+  if (!response.ok) {
+    throw new Error(`Request failed: ${response.status} ${response.statusText}`);
+  }
+}
+
+export async function fetchMetrics(): Promise<Metrics> {
+  return request<Metrics>(`${API_URL}/metrics`);
 }
 
 export async function fetchSystemInfo(): Promise<SystemInfo> {
-  const response = await fetch(`${API_URL}/system/info`, {
-    method: 'GET',
-    headers: {
-      'Content-Type': 'application/json',
-    },
-    // Note: endpoint is public, but keeping credentials for consistency
-    credentials: 'include',
-  });
-
-  if (!response.ok) {
-    throw new Error(`Failed to fetch system info: ${response.status} ${response.statusText}`);
-  }
-
-  return response.json();
+  return request<SystemInfo>(`${API_URL}/system/info`);
 }
 
 export async function login(email: string, password: string): Promise<User> {
-  const response = await fetch(`${API_URL}/auth/login`, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-    },
-    credentials: 'include', // Important: allows cookies to be set
-    body: JSON.stringify({ email, password }),
-  });
-
-  if (!response.ok) {
-    if (response.status === 401) {
+  try {
+    return await request<User>(`${API_URL}/auth/login`, {
+      method: 'POST',
+      body: JSON.stringify({ email, password }),
+    });
+  } catch (error) {
+    // Handle specific login errors
+    if (error instanceof Error && error.message === 'Request failed: 401 Unauthorized') {
       throw new Error('Invalid email or password');
     }
-    throw new Error(`Login failed: ${response.status} ${response.statusText}`);
+    throw error;
   }
-
-  return response.json();
 }
 
 export async function logout(): Promise<void> {
+  // Don't use request helper for logout - it shouldn't trigger session expiry
   const response = await fetch(`${API_URL}/auth/logout`, {
     method: 'POST',
-    credentials: 'include', // Include cookies for authentication
+    credentials: 'include',
   });
 
   if (!response.ok && response.status !== 204) {
@@ -137,195 +165,64 @@ export async function logout(): Promise<void> {
 }
 
 export async function register(email: string, password: string): Promise<CreateUserResponse> {
-  const response = await fetch(`${API_URL}/auth/register`, {
+  return request<CreateUserResponse>(`${API_URL}/auth/register`, {
     method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-    },
-    credentials: 'include', // Include cookies for authentication
     body: JSON.stringify({ email, password }),
   });
-
-  if (!response.ok) {
-    const errorData = await response.json().catch(() => null);
-    const message = errorData?.error || `Registration failed: ${response.status} ${response.statusText}`;
-    throw new Error(message);
-  }
-
-  return response.json();
 }
 
 export async function fetchCurrentUser(): Promise<User> {
-  const response = await fetch(`${API_URL}/auth/me`, {
-    method: 'GET',
-    headers: {
-      'Content-Type': 'application/json',
-    },
-    credentials: 'include', // Include cookies for authentication
-  });
-
-  if (!response.ok) {
-    throw new Error(`Failed to fetch current user: ${response.status} ${response.statusText}`);
-  }
-
-  return response.json();
+  return request<User>(`${API_URL}/auth/me`);
 }
 
 export async function listUsers(): Promise<User[]> {
-  const response = await fetch(`${API_URL}/auth/users`, {
-    method: 'GET',
-    headers: {
-      'Content-Type': 'application/json',
-    },
-    credentials: 'include', // Include cookies for authentication
-  });
-
-  if (!response.ok) {
-    throw new Error(`Failed to fetch users: ${response.status} ${response.statusText}`);
-  }
-
-  return response.json();
+  return request<User[]>(`${API_URL}/auth/users`);
 }
 
 export async function createUser(data: CreateUserRequest): Promise<CreateUserResponse> {
-  const response = await fetch(`${API_URL}/auth/users`, {
+  return request<CreateUserResponse>(`${API_URL}/auth/users`, {
     method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-    },
-    credentials: 'include', // Include cookies for authentication
     body: JSON.stringify(data),
   });
-
-  if (!response.ok) {
-    const errorData = await response.json().catch(() => null);
-    const message = errorData?.error || `Failed to create user: ${response.status} ${response.statusText}`;
-    throw new Error(message);
-  }
-
-  return response.json();
 }
 
 export async function deleteUser(id: number): Promise<void> {
-  const response = await fetch(`${API_URL}/auth/users/${id}`, {
+  return requestVoid(`${API_URL}/auth/users/${id}`, {
     method: 'DELETE',
-    credentials: 'include', // Include cookies for authentication
   });
-
-  if (!response.ok) {
-    const errorData = await response.json().catch(() => null);
-    const message = errorData?.error || `Failed to delete user: ${response.status} ${response.statusText}`;
-    throw new Error(message);
-  }
 }
 
 export async function changePassword(currentPassword: string, newPassword: string): Promise<void> {
-  const response = await fetch(`${API_URL}/auth/change-password`, {
+  return requestVoid(`${API_URL}/auth/change-password`, {
     method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-    },
-    credentials: 'include', // Include cookies for authentication
     body: JSON.stringify({ current_password: currentPassword, new_password: newPassword }),
   });
-
-  if (!response.ok) {
-    const errorData = await response.json().catch(() => null);
-    let message: string;
-
-    if (response.status === 401) {
-      message = errorData?.error || 'Current password is incorrect';
-    } else if (response.status === 400) {
-      message = errorData?.error || 'New password does not meet requirements';
-    } else {
-      message = errorData?.error || `Failed to change password: ${response.status} ${response.statusText}`;
-    }
-
-    throw new Error(message);
-  }
 }
 
 // Alert Rules API
 
 export async function listAlertRules(): Promise<AlertRule[]> {
-  const response = await fetch(`${API_URL}/alerts/rules`, {
-    method: 'GET',
-    headers: {
-      'Content-Type': 'application/json',
-    },
-    credentials: 'include', // Include cookies for authentication
-  });
-
-  if (!response.ok) {
-    throw new Error(`Failed to fetch alert rules: ${response.status} ${response.statusText}`);
-  }
-
-  return response.json();
+  return request<AlertRule[]>(`${API_URL}/alerts/rules`);
 }
 
 export async function createAlertRule(rule: CreateAlertRuleRequest): Promise<AlertRule> {
-  const response = await fetch(`${API_URL}/alerts/rules`, {
+  return request<AlertRule>(`${API_URL}/alerts/rules`, {
     method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-    },
-    credentials: 'include', // Include cookies for authentication
     body: JSON.stringify(rule),
   });
-
-  if (!response.ok) {
-    const errorData = await response.json().catch(() => null);
-    const message = errorData?.error || `Failed to create alert rule: ${response.status} ${response.statusText}`;
-    throw new Error(message);
-  }
-
-  return response.json();
 }
 
 export async function updateAlertRule(id: number, rule: CreateAlertRuleRequest): Promise<AlertRule> {
-  const response = await fetch(`${API_URL}/alerts/rules/${id}`, {
+  return request<AlertRule>(`${API_URL}/alerts/rules/${id}`, {
     method: 'PUT',
-    headers: {
-      'Content-Type': 'application/json',
-    },
-    credentials: 'include', // Include cookies for authentication
     body: JSON.stringify(rule),
   });
-
-  if (!response.ok) {
-    const errorData = await response.json().catch(() => null);
-    let message: string;
-
-    if (response.status === 404) {
-      message = 'Alert rule not found';
-    } else {
-      message = errorData?.error || `Failed to update alert rule: ${response.status} ${response.statusText}`;
-    }
-
-    throw new Error(message);
-  }
-
-  return response.json();
 }
 
 export async function deleteAlertRule(id: number): Promise<void> {
-  const response = await fetch(`${API_URL}/alerts/rules/${id}`, {
+  return requestVoid(`${API_URL}/alerts/rules/${id}`, {
     method: 'DELETE',
-    credentials: 'include', // Include cookies for authentication
   });
-
-  if (!response.ok) {
-    const errorData = await response.json().catch(() => null);
-    let message: string;
-
-    if (response.status === 404) {
-      message = 'Alert rule not found';
-    } else {
-      message = errorData?.error || `Failed to delete alert rule: ${response.status} ${response.statusText}`;
-    }
-
-    throw new Error(message);
-  }
 }
 
 // Alert Events API
@@ -336,37 +233,11 @@ export async function listAlertEvents(limit?: number): Promise<AlertEvent[]> {
     url.searchParams.set('limit', limit.toString());
   }
 
-  const response = await fetch(url.toString(), {
-    method: 'GET',
-    headers: {
-      'Content-Type': 'application/json',
-    },
-    credentials: 'include', // Include cookies for authentication
-  });
-
-  if (!response.ok) {
-    throw new Error(`Failed to fetch alert events: ${response.status} ${response.statusText}`);
-  }
-
-  return response.json();
+  return request<AlertEvent[]>(url.toString());
 }
 
 export async function ackAlertEvent(id: number): Promise<void> {
-  const response = await fetch(`${API_URL}/alerts/events/${id}/ack`, {
+  return requestVoid(`${API_URL}/alerts/events/${id}/ack`, {
     method: 'POST',
-    credentials: 'include', // Include cookies for authentication
   });
-
-  if (!response.ok) {
-    const errorData = await response.json().catch(() => null);
-    let message: string;
-
-    if (response.status === 404) {
-      message = 'Alert event not found or already acknowledged';
-    } else {
-      message = errorData?.error || `Failed to acknowledge alert event: ${response.status} ${response.statusText}`;
-    }
-
-    throw new Error(message);
-  }
 }

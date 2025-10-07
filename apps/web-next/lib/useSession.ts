@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useCallback } from 'react';
 import { fetchCurrentUser, login as apiLogin, logout as apiLogout, register as apiRegister, changePassword as apiChangePassword, type User } from './api';
+import { useToast } from '@/components/ui/use-toast';
 
 export type SessionStatus = 'loading' | 'authenticated' | 'unauthenticated';
 
@@ -17,6 +18,44 @@ export interface Session {
 export function useSession(): Session {
   const [user, setUser] = useState<User | null>(null);
   const [status, setStatus] = useState<SessionStatus>('loading');
+  const { toast } = useToast();
+
+  // Handle session expiry
+  const handleSessionExpiry = useCallback(async () => {
+    // Clear user state
+    setUser(null);
+    setStatus('unauthenticated');
+
+    // Show toast notification
+    toast({
+      title: "Session expired",
+      description: "Please log in again.",
+      variant: "destructive",
+    });
+
+    // Best effort logout to clean up server session
+    try {
+      await apiLogout();
+    } catch (error) {
+      // Ignore logout failures during session expiry
+      console.warn('Failed to logout during session expiry:', error);
+    }
+  }, [toast]);
+
+  // Listen for session expiry events
+  useEffect(() => {
+    const handleSessionExpired = () => {
+      handleSessionExpiry();
+    };
+
+    if (typeof window !== 'undefined') {
+      window.addEventListener('session-expired', handleSessionExpired);
+
+      return () => {
+        window.removeEventListener('session-expired', handleSessionExpired);
+      };
+    }
+  }, [handleSessionExpiry]);
 
   // Check authentication status on mount
   useEffect(() => {
