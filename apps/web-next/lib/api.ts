@@ -5,6 +5,18 @@ export interface Metrics {
   uptime_s: number;
 }
 
+export interface SystemInfo {
+  hostname: string;
+  platform: string;
+  platform_version: string;
+  kernel_version: string;
+  uptime_s: number;
+  cpu_cores: number;
+  memory_total_mb: number;
+  disk_total_gb: number;
+  last_boot_time: number;
+}
+
 export interface User {
   id: number;
   email: string;
@@ -71,6 +83,23 @@ export async function fetchMetrics(): Promise<Metrics> {
 
   if (!response.ok) {
     throw new Error(`Failed to fetch metrics: ${response.status} ${response.statusText}`);
+  }
+
+  return response.json();
+}
+
+export async function fetchSystemInfo(): Promise<SystemInfo> {
+  const response = await fetch(`${API_URL}/system/info`, {
+    method: 'GET',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    // Note: endpoint is public, but keeping credentials for consistency
+    credentials: 'include',
+  });
+
+  if (!response.ok) {
+    throw new Error(`Failed to fetch system info: ${response.status} ${response.statusText}`);
   }
 
   return response.json();

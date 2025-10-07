@@ -4,6 +4,7 @@ import { useEffect } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { MetricsCard } from "@/components/MetricsCard";
+import { SystemInfoCard } from "@/components/SystemInfoCard";
 import { useSession } from "@/lib/useSession";
 import { useAlertsWithNotifications } from "@/lib/useAlertsWithNotifications";
 import { Badge } from "@/components/ui/badge";
@@ -107,7 +108,7 @@ export default function Home() {
       </div>
 
       <div className="flex items-center justify-center min-h-[calc(100vh-82px)] px-4">
-        <div className="text-center space-y-6 max-w-3xl w-full">
+        <div className="text-center space-y-6 max-w-4xl w-full">
           <div className="space-y-2">
             <h1 className="text-4xl sm:text-5xl font-semibold tracking-wide text-primary drop-shadow-xl">
               Lunar System Pulse
@@ -117,7 +118,10 @@ export default function Home() {
               touch.
             </p>
           </div>
-          <MetricsCard />
+          <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-1">
+            <MetricsCard />
+            <SystemInfoCard />
+          </div>
         </div>
       </div>
     </div>

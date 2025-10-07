@@ -184,6 +184,24 @@ The web interface will be available at `http://localhost:3000`
   - Verify the backend logs show CORS origin matching your frontend URL
 - **WebSocket connection fails**: Normal fallback to polling will occur automatically
 
+### One-Command Reset & Start
+
+For a fresh test run (clean database, new JWT secret, backend + frontend started together) run the helper script from the repository root:
+
+```bash
+./scripts/dev-reset.sh
+```
+
+The script will:
+
+- Stop any existing `go run`/`next dev` processes
+- Remove `apps/api-go/data/lunasentri.db` so you start from a clean slate
+- Generate a random `AUTH_JWT_SECRET` (unless you provide one in the environment)
+- Start the Go API on port **8080** with `SECURE_COOKIE=false`
+- Start the Next.js dev server on port **3001** (`http://localhost:3001`)
+
+After the servers boot, register the first account via the UI (`/register`) to create a new admin. Press `Ctrl+C` in the terminal when you want to stop both services.
+
 ## Development Commands
 
 ### Root Workspace Commands
