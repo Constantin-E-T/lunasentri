@@ -1,10 +1,10 @@
 'use client';
 
 import { useEffect, useRef } from 'react';
-import { useAlerts } from './useAlerts';
+import { useAlerts } from '../useAlerts';
 import { useToast } from '@/components/ui/use-toast';
-import { useSession } from './useSession';
-import type { AlertEvent } from './api';
+import { useSession } from '../useSession';
+import type { AlertEvent } from '../api';
 
 export interface UseAlertsWithNotificationsReturn extends ReturnType<typeof useAlerts> {
     // Additional functionality for notifications

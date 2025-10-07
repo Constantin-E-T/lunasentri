@@ -4,10 +4,9 @@ import { useEffect } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { MetricsCard } from "@/components/MetricsCard";
-import { SystemInfoCard } from "@/components/SystemInfoCard";
-import { ActiveAlertsCard } from "@/components/ActiveAlertsCard";
+import { SystemInfoCard, ActiveAlertsCard } from "@/components/dashboard";
 import { useSession } from "@/lib/useSession";
-import { useAlertsWithNotifications } from "@/lib/useAlertsWithNotifications";
+import { useAlertsWithNotifications } from "@/lib/alerts";
 import { Badge } from "@/components/ui/badge";
 
 export default function Home() {

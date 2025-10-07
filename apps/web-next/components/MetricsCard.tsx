@@ -1,7 +1,7 @@
 "use client";
 
 import { useMetrics } from "@/lib/useMetrics";
-import { MetricSparkline } from "@/components/charts/MetricSparkline";
+import { MetricSparkline } from "@/components/dashboard";
 
 function formatUptime(seconds: number): string {
   const days = Math.floor(seconds / 86400);

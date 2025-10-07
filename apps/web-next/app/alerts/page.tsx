@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { useSession } from "@/lib/useSession";
-import { useAlertsWithNotifications } from "@/lib/useAlertsWithNotifications";
+import { useAlertsWithNotifications } from "@/lib/alerts";
 import { CreateAlertRuleRequest, AlertRule, AlertEvent } from "@/lib/api";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";

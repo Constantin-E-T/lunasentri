@@ -10,8 +10,8 @@ import {
   HardDrive,
   Server,
 } from "lucide-react";
-import { useAlertsWithNotifications } from "@/lib/useAlertsWithNotifications";
-import type { AlertEvent, AlertRule } from "@/lib/api";
+import { useAlertsWithNotifications } from "@/lib/alerts";
+import type { AlertEvent, AlertRule } from "@/lib/alerts";
 
 interface ActiveAlertsCardProps {
   events?: AlertEvent[];
