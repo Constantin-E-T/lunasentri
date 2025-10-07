@@ -83,6 +83,33 @@ Authorization: Required
 # Streams metrics every 3 seconds
 ```
 
+### System Info API
+
+#### Get System Information
+
+```bash
+GET /system/info
+
+Response:
+{
+    "hostname": "server01",
+    "platform": "linux",
+    "platform_version": "ubuntu 22.04",
+    "kernel_version": "5.15.0-72-generic",
+    "uptime_s": 3600,
+    "cpu_cores": 4,
+    "memory_total_mb": 8192,
+    "disk_total_gb": 256,
+    "last_boot_time": 1640995200
+}
+```
+
+Example using curl:
+
+```bash
+curl -X GET http://localhost:8080/system/info
+```
+
 ### Alert Management
 
 #### List Alert Rules

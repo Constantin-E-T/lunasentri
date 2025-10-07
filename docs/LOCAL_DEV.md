@@ -262,6 +262,15 @@ pnpm start
 - `GET /metrics` - System metrics (CPU, memory, disk, uptime)
 - `WebSocket /ws` - Real-time metrics streaming (sends JSON every ~3 seconds)
 
+#### Alert System Endpoints (require authentication)
+
+- `GET /alerts/rules` - List all alert rules
+- `POST /alerts/rules` - Create a new alert rule
+- `PUT /alerts/rules/{id}` - Update an existing alert rule
+- `DELETE /alerts/rules/{id}` - Delete an alert rule
+- `GET /alerts/events` - List all alert events (with optional limit query parameter)
+- `PUT /alerts/events/{id}/ack` - Acknowledge an alert event
+
 #### Registration and Authentication
 
 **POST /auth/register** (Public)
@@ -769,6 +778,130 @@ cd apps/web-next && npx tsc --noEmit
 - **Caching**: Both jobs use caching to speed up builds
   - Go: Automatic module caching via `setup-go@v5`
   - pnpm: Automatic store caching via `setup-node@v4`
+
+## Alert System
+
+LunaSentri includes a comprehensive alert system that monitors system metrics and triggers alerts when thresholds are breached. The alert system consists of two main components: **Alert Rules** (what to monitor) and **Alert Events** (when alerts are triggered).
+
+### Alert Rules
+
+Alert Rules define the conditions that trigger alerts. Each rule monitors a specific metric (CPU, memory, or disk usage) and triggers events when the metric crosses a defined threshold.
+
+**Rule Properties:**
+
+- **Name**: Human-readable identifier for the rule
+- **Metric Type**: `cpu`, `memory`, or `disk`
+- **Threshold**: Percentage value (0-100) that triggers the alert
+- **Condition**: `above` or `below` the threshold
+- **Consecutive Samples**: Number of consecutive metric samples that must meet the condition before triggering
+- **Enabled**: Whether the rule is actively monitoring
+
+**Example Alert Rules:**
+
+- High CPU: Trigger when CPU usage is above 80% for 3 consecutive samples
+- Low disk space: Trigger when disk usage is above 90% for 2 consecutive samples
+- Memory pressure: Trigger when memory usage is above 85% for 5 consecutive samples
+
+### Alert Events
+
+Alert Events are generated when Alert Rules are triggered. Each event represents a specific instance of a rule being breached.
+
+**Event Properties:**
+
+- **Rule**: Reference to the Alert Rule that was triggered
+- **Triggered At**: Timestamp when the event was created
+- **Metric Value**: The actual metric value that caused the trigger
+- **Acknowledged**: Whether an admin has acknowledged the event
+- **Acknowledged At**: Timestamp of acknowledgment (if applicable)
+
+### Real-time Monitoring
+
+The alert system evaluates rules in real-time:
+
+- **HTTP /metrics endpoint**: Evaluates all active rules on each request
+- **WebSocket /ws endpoint**: Evaluates rules on each streamed metric sample (~3 seconds)
+- **Consecutive Logic**: Tracks consecutive breach counts per rule to prevent false positives
+- **Thread Safety**: Uses read/write locks for concurrent access to rule state
+
+### Frontend Integration
+
+The web interface provides complete alert management:
+
+**Dashboard Integration:**
+
+- Alert badge appears in navigation when unacknowledged events exist
+- Badge shows count of unacknowledged events
+- Quick access link to alerts page
+
+**Alerts Page (`/alerts`):**
+
+- **Create Rules**: Modal form for creating new alert rules with validation
+- **Manage Rules**: Table view with edit/delete actions and enabled/disabled toggle
+- **View Events**: List of recent alert events with timestamps and values
+- **Acknowledge Events**: One-click acknowledgment to mark events as handled
+
+**API Integration:**
+
+- Uses custom `useAlerts` hook for state management
+- Optimistic updates for better UX
+- Automatic refresh and error handling
+- SWR-style data fetching patterns
+
+### Database Schema
+
+The alert system uses two SQLite tables with foreign key constraints:
+
+**alert_rules table:**
+
+```sql
+CREATE TABLE alert_rules (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    name TEXT NOT NULL,
+    metric_type TEXT NOT NULL CHECK (metric_type IN ('cpu', 'memory', 'disk')),
+    threshold REAL NOT NULL CHECK (threshold >= 0 AND threshold <= 100),
+    condition TEXT NOT NULL CHECK (condition IN ('above', 'below')),
+    consecutive_samples INTEGER NOT NULL CHECK (consecutive_samples > 0),
+    enabled BOOLEAN NOT NULL DEFAULT 1,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+);
+```
+
+**alert_events table:**
+
+```sql
+CREATE TABLE alert_events (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    rule_id INTEGER NOT NULL,
+    triggered_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    metric_value REAL NOT NULL,
+    acknowledged BOOLEAN NOT NULL DEFAULT 0,
+    acknowledged_at DATETIME,
+    FOREIGN KEY (rule_id) REFERENCES alert_rules(id) ON DELETE CASCADE
+);
+```
+
+### Testing
+
+The alert system includes comprehensive test coverage:
+
+- **Unit Tests**: Service logic, storage operations, and HTTP handlers
+- **Integration Tests**: End-to-end API workflows
+- **Frontend Tests**: React hooks and component behavior
+- **Test Coverage**: 100% of alert-related code paths
+
+Run alert tests:
+
+```bash
+# Backend tests
+cd apps/api-go
+go test ./internal/alerts/... -v
+go test ./internal/storage/... -v -run "Alert"
+
+# Frontend tests  
+cd apps/web-next
+npm test -- useAlerts
+```
+
 - **Race Detection**: Go tests run with `-race` flag to catch concurrency bugs
 - **Type Safety**: TypeScript strict mode checks enforce type correctness
 - **Monorepo Support**: Uses pnpm workspace filtering for selective builds

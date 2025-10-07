@@ -12,6 +12,34 @@ export interface User {
   created_at?: string;
 }
 
+export interface AlertRule {
+  id: number;
+  name: string;
+  metric: 'cpu_pct' | 'mem_used_pct' | 'disk_used_pct';
+  threshold_pct: number;
+  comparison: 'above' | 'below';
+  trigger_after: number;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface AlertEvent {
+  id: number;
+  rule_id: number;
+  triggered_at: string;
+  value: number;
+  acknowledged: boolean;
+  acknowledged_at?: string;
+}
+
+export interface CreateAlertRuleRequest {
+  name: string;
+  metric: 'cpu_pct' | 'mem_used_pct' | 'disk_used_pct';
+  threshold_pct: number;
+  comparison: 'above' | 'below';
+  trigger_after: number;
+}
+
 export interface CreateUserRequest {
   email: string;
   password?: string;
@@ -182,6 +210,132 @@ export async function changePassword(currentPassword: string, newPassword: strin
       message = errorData?.error || 'New password does not meet requirements';
     } else {
       message = errorData?.error || `Failed to change password: ${response.status} ${response.statusText}`;
+    }
+
+    throw new Error(message);
+  }
+}
+
+// Alert Rules API
+
+export async function listAlertRules(): Promise<AlertRule[]> {
+  const response = await fetch(`${API_URL}/alerts/rules`, {
+    method: 'GET',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    credentials: 'include', // Include cookies for authentication
+  });
+
+  if (!response.ok) {
+    throw new Error(`Failed to fetch alert rules: ${response.status} ${response.statusText}`);
+  }
+
+  return response.json();
+}
+
+export async function createAlertRule(rule: CreateAlertRuleRequest): Promise<AlertRule> {
+  const response = await fetch(`${API_URL}/alerts/rules`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    credentials: 'include', // Include cookies for authentication
+    body: JSON.stringify(rule),
+  });
+
+  if (!response.ok) {
+    const errorData = await response.json().catch(() => null);
+    const message = errorData?.error || `Failed to create alert rule: ${response.status} ${response.statusText}`;
+    throw new Error(message);
+  }
+
+  return response.json();
+}
+
+export async function updateAlertRule(id: number, rule: CreateAlertRuleRequest): Promise<AlertRule> {
+  const response = await fetch(`${API_URL}/alerts/rules/${id}`, {
+    method: 'PUT',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    credentials: 'include', // Include cookies for authentication
+    body: JSON.stringify(rule),
+  });
+
+  if (!response.ok) {
+    const errorData = await response.json().catch(() => null);
+    let message: string;
+
+    if (response.status === 404) {
+      message = 'Alert rule not found';
+    } else {
+      message = errorData?.error || `Failed to update alert rule: ${response.status} ${response.statusText}`;
+    }
+
+    throw new Error(message);
+  }
+
+  return response.json();
+}
+
+export async function deleteAlertRule(id: number): Promise<void> {
+  const response = await fetch(`${API_URL}/alerts/rules/${id}`, {
+    method: 'DELETE',
+    credentials: 'include', // Include cookies for authentication
+  });
+
+  if (!response.ok) {
+    const errorData = await response.json().catch(() => null);
+    let message: string;
+
+    if (response.status === 404) {
+      message = 'Alert rule not found';
+    } else {
+      message = errorData?.error || `Failed to delete alert rule: ${response.status} ${response.statusText}`;
+    }
+
+    throw new Error(message);
+  }
+}
+
+// Alert Events API
+
+export async function listAlertEvents(limit?: number): Promise<AlertEvent[]> {
+  const url = new URL(`${API_URL}/alerts/events`);
+  if (limit) {
+    url.searchParams.set('limit', limit.toString());
+  }
+
+  const response = await fetch(url.toString(), {
+    method: 'GET',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    credentials: 'include', // Include cookies for authentication
+  });
+
+  if (!response.ok) {
+    throw new Error(`Failed to fetch alert events: ${response.status} ${response.statusText}`);
+  }
+
+  return response.json();
+}
+
+export async function ackAlertEvent(id: number): Promise<void> {
+  const response = await fetch(`${API_URL}/alerts/events/${id}/ack`, {
+    method: 'POST',
+    credentials: 'include', // Include cookies for authentication
+  });
+
+  if (!response.ok) {
+    const errorData = await response.json().catch(() => null);
+    let message: string;
+
+    if (response.status === 404) {
+      message = 'Alert event not found or already acknowledged';
+    } else {
+      message = errorData?.error || `Failed to acknowledge alert event: ${response.status} ${response.statusText}`;
     }
 
     throw new Error(message);

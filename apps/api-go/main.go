@@ -17,6 +17,7 @@ import (
 	"github.com/Constantin-E-T/lunasentri/apps/api-go/internal/auth"
 	"github.com/Constantin-E-T/lunasentri/apps/api-go/internal/metrics"
 	"github.com/Constantin-E-T/lunasentri/apps/api-go/internal/storage"
+	"github.com/Constantin-E-T/lunasentri/apps/api-go/internal/system"
 	"github.com/gorilla/websocket"
 )
 
@@ -596,8 +597,39 @@ func handleWebSocket(collector metrics.Collector, startTime time.Time, alertServ
 	}
 }
 
-// newServer creates a new HTTP server with the given collector, auth service, and alert service
-func newServer(collector metrics.Collector, startTime time.Time, authService *auth.Service, alertService *alerts.Service, accessTTL time.Duration, passwordResetTTL time.Duration, secureCookie bool) *http.ServeMux {
+// handleSystemInfo handles GET /system/info
+func handleSystemInfo(systemService system.Service) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodGet {
+			http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+
+		// Create context with timeout
+		ctx, cancel := context.WithTimeout(r.Context(), 5*time.Second)
+		defer cancel()
+
+		// Get system information
+		systemInfo, err := systemService.GetSystemInfo(ctx)
+		if err != nil {
+			log.Printf("Failed to collect system info: %v", err)
+			http.Error(w, `{"error":"Failed to collect system information"}`, http.StatusInternalServerError)
+			return
+		}
+
+		// Encode and send response
+		if err := json.NewEncoder(w).Encode(systemInfo); err != nil {
+			log.Printf("Failed to encode system info response: %v", err)
+			http.Error(w, "Internal Server Error", http.StatusInternalServerError)
+			return
+		}
+	}
+}
+
+// newServer creates a new HTTP server with the given collector, auth service, alert service, and system service
+func newServer(collector metrics.Collector, startTime time.Time, authService *auth.Service, alertService *alerts.Service, systemService system.Service, accessTTL time.Duration, passwordResetTTL time.Duration, secureCookie bool) *http.ServeMux {
 	// Create a new ServeMux
 	mux := http.NewServeMux()
 
@@ -610,6 +642,9 @@ func newServer(collector metrics.Collector, startTime time.Time, authService *au
 		w.Header().Set("Content-Type", "application/json")
 		fmt.Fprintf(w, `{"status":"healthy"}`)
 	})
+
+	// System info endpoint (public for monitoring)
+	mux.HandleFunc("/system/info", handleSystemInfo(systemService))
 
 	// Register auth handlers (public endpoints)
 	mux.HandleFunc("/auth/register", handleRegister(authService))
@@ -1002,11 +1037,14 @@ func main() {
 	// Initialize metrics collector
 	metricsCollector := metrics.NewSystemCollector()
 
+	// Initialize system service
+	systemService := system.NewSystemService()
+
 	// Initialize alert service
 	alertService := alerts.NewService(store)
 
-	// Create server with real collector, auth service, and alert service
-	mux := newServer(metricsCollector, serverStartTime, authService, alertService, accessTTL, passwordResetTTL, secureCookie)
+	// Create server with real collector, auth service, alert service, and system service
+	mux := newServer(metricsCollector, serverStartTime, authService, alertService, systemService, accessTTL, passwordResetTTL, secureCookie)
 
 	// Create HTTP server with CORS middleware
 	port := "8080"
