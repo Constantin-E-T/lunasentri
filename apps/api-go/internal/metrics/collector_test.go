@@ -9,14 +9,14 @@ import (
 
 func TestSystemCollector_Snapshot(t *testing.T) {
 	collector := NewSystemCollector()
-	
+
 	// Create context with timeout to avoid hanging tests
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
 	// Call Snapshot and ensure it doesn't panic
 	metrics, err := collector.Snapshot(ctx)
-	
+
 	// Should not return an error (errors are handled internally)
 	if err != nil {
 		t.Errorf("Snapshot() returned unexpected error: %v", err)
@@ -42,17 +42,17 @@ func TestSystemCollector_Snapshot(t *testing.T) {
 		t.Errorf("UptimeS should be 0 (set by caller): got %f, want 0", metrics.UptimeS)
 	}
 
-	t.Logf("Collected metrics - CPU: %.2f%%, Memory: %.2f%%, Disk: %.2f%%", 
+	t.Logf("Collected metrics - CPU: %.2f%%, Memory: %.2f%%, Disk: %.2f%%",
 		metrics.CPUPct, metrics.MemUsedPct, metrics.DiskUsedPct)
 }
 
 func TestNewSystemCollector(t *testing.T) {
 	collector := NewSystemCollector()
-	
+
 	if collector == nil {
 		t.Error("NewSystemCollector() returned nil")
 	}
-	
+
 	if collector.loggedErrors == nil {
 		t.Error("NewSystemCollector() did not initialize loggedErrors map")
 	}
@@ -68,7 +68,7 @@ func TestSystemCollector_MultipleSnapshots(t *testing.T) {
 		if err != nil {
 			t.Errorf("Snapshot %d returned error: %v", i, err)
 		}
-		
+
 		// Basic range checks
 		if metrics.CPUPct < 0 || metrics.CPUPct > 100 {
 			t.Errorf("Snapshot %d: CPU percentage out of range: %f", i, metrics.CPUPct)
@@ -100,7 +100,7 @@ func TestSystemCollector_ConcurrentAccess(t *testing.T) {
 	for i := 0; i < numGoroutines; i++ {
 		go func(goroutineID int) {
 			defer wg.Done()
-			
+
 			for j := 0; j < numCallsPerGoroutine; j++ {
 				_, err := collector.Snapshot(ctx)
 				if err != nil {
@@ -119,7 +119,7 @@ func TestSystemCollector_ConcurrentAccess(t *testing.T) {
 		t.Errorf("Concurrent Snapshot() call failed: %v", err)
 	}
 
-	t.Logf("Successfully completed %d concurrent calls across %d goroutines", 
+	t.Logf("Successfully completed %d concurrent calls across %d goroutines",
 		numGoroutines*numCallsPerGoroutine, numGoroutines)
 }
 
@@ -135,14 +135,14 @@ func TestSystemCollector_ThreadSafety(t *testing.T) {
 	for i := 0; i < numGoroutines; i++ {
 		go func(id int) {
 			defer wg.Done()
-			
+
 			// Try to access and modify the logged errors map concurrently
 			errorType := "test_error"
-			
+
 			if !collector.hasLoggedError(errorType) {
 				collector.markErrorLogged(errorType)
 			}
-			
+
 			// Verify it's now marked as logged
 			if !collector.hasLoggedError(errorType) {
 				t.Errorf("Goroutine %d: Error should be marked as logged", id)
@@ -151,7 +151,7 @@ func TestSystemCollector_ThreadSafety(t *testing.T) {
 	}
 
 	wg.Wait()
-	
+
 	// Final verification
 	if !collector.hasLoggedError("test_error") {
 		t.Error("Final check: test_error should be marked as logged")

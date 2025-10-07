@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"net/url"
 	"time"
 
 	"github.com/Constantin-E-T/lunasentri/apps/api-go/internal/storage"
@@ -129,7 +130,15 @@ func (n *Notifier) sendToWebhook(ctx context.Context, webhook storage.Webhook, p
 		return fmt.Errorf("failed to create signature: %w", err)
 	}
 
+	// Extract domain from URL for safe logging (never log full URL or secrets)
+	webhookURL, _ := url.Parse(webhook.URL)
+	domain := webhookURL.Host
+	if domain == "" {
+		domain = webhook.URL // fallback for invalid URLs
+	}
+
 	// Retry logic with exponential backoff
+	// TODO: Add rate limiting and circuit breaker patterns for improved reliability
 	maxRetries := 3
 	for attempt := 1; attempt <= maxRetries; attempt++ {
 		select {
@@ -138,23 +147,29 @@ func (n *Notifier) sendToWebhook(ctx context.Context, webhook storage.Webhook, p
 		default:
 		}
 
-		err := n.makeHTTPRequest(ctx, webhook.URL, payloadBytes, signature)
+		statusCode, err := n.makeHTTPRequest(ctx, webhook.URL, payloadBytes, signature)
 		if err == nil {
-			// Success - mark webhook as successful
+			// Success - mark webhook as successful and log
 			if markErr := n.store.MarkWebhookSuccess(ctx, webhook.ID, time.Now()); markErr != nil {
-				n.logger.Printf("Failed to mark webhook %d as successful: %v", webhook.ID, markErr)
+				n.logger.Printf("[WEBHOOK] failed to mark webhook=%d as successful: %v", webhook.ID, markErr)
 			}
-			n.logger.Printf("Successfully sent webhook to %s (attempt %d)", webhook.URL, attempt)
+			n.logger.Printf("[WEBHOOK] delivered webhook=%d url=%s status=%d attempt=%d",
+				webhook.ID, domain, statusCode, attempt)
 			return nil
 		}
 
-		n.logger.Printf("Webhook attempt %d failed for %s: %v", attempt, webhook.URL, err)
+		// Log failure with attempt number
+		n.logger.Printf("[WEBHOOK] failed webhook=%d url=%s attempt=%d error=%v",
+			webhook.ID, domain, attempt, err)
 
 		// If this was the last attempt, mark as failure
 		if attempt == maxRetries {
 			if markErr := n.store.IncrementWebhookFailure(ctx, webhook.ID, time.Now()); markErr != nil {
-				n.logger.Printf("Failed to increment failure count for webhook %d: %v", webhook.ID, markErr)
+				n.logger.Printf("[WEBHOOK] failed to increment failure count for webhook=%d: %v",
+					webhook.ID, markErr)
 			}
+			n.logger.Printf("[WEBHOOK] failed webhook=%d url=%s attempts=%d final_error=%v",
+				webhook.ID, domain, maxRetries, err)
 			return fmt.Errorf("webhook delivery failed after %d attempts: %w", maxRetries, err)
 		}
 
@@ -187,10 +202,10 @@ func (n *Notifier) createSignature(payload []byte, secretHex string) (string, er
 }
 
 // makeHTTPRequest makes the actual HTTP request to the webhook URL
-func (n *Notifier) makeHTTPRequest(ctx context.Context, url string, payload []byte, signature string) error {
+func (n *Notifier) makeHTTPRequest(ctx context.Context, url string, payload []byte, signature string) (int, error) {
 	req, err := http.NewRequestWithContext(ctx, "POST", url, bytes.NewReader(payload))
 	if err != nil {
-		return fmt.Errorf("failed to create request: %w", err)
+		return 0, fmt.Errorf("failed to create request: %w", err)
 	}
 
 	req.Header.Set("Content-Type", "application/json")
@@ -199,13 +214,13 @@ func (n *Notifier) makeHTTPRequest(ctx context.Context, url string, payload []by
 
 	resp, err := n.client.Do(req)
 	if err != nil {
-		return fmt.Errorf("http request failed: %w", err)
+		return 0, fmt.Errorf("http request failed: %w", err)
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		return fmt.Errorf("webhook returned non-2xx status: %d", resp.StatusCode)
+		return resp.StatusCode, fmt.Errorf("webhook returned non-2xx status: %d", resp.StatusCode)
 	}
 
-	return nil
+	return resp.StatusCode, nil
 }

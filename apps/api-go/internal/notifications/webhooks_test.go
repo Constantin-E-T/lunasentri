@@ -20,15 +20,15 @@ import (
 
 // mockStore implements storage.Store for testing
 type mockStore struct {
-	users     []storage.User
-	webhooks  map[int][]storage.Webhook // userID -> webhooks
-	failureCounts map[int]int            // webhookID -> failure count
-	successTimes  map[int]time.Time      // webhookID -> last success time
+	users         []storage.User
+	webhooks      map[int][]storage.Webhook // userID -> webhooks
+	failureCounts map[int]int               // webhookID -> failure count
+	successTimes  map[int]time.Time         // webhookID -> last success time
 }
 
 func newMockStore() *mockStore {
 	return &mockStore{
-		webhooks:     make(map[int][]storage.Webhook),
+		webhooks:      make(map[int][]storage.Webhook),
 		failureCounts: make(map[int]int),
 		successTimes:  make(map[int]time.Time),
 	}
@@ -133,7 +133,7 @@ func TestNotifier_Send_Success(t *testing.T) {
 		if r.Header.Get("Content-Type") != "application/json" {
 			t.Errorf("Expected Content-Type application/json, got %s", r.Header.Get("Content-Type"))
 		}
-		
+
 		receivedSignature = r.Header.Get("X-LunaSentri-Signature")
 		if receivedSignature == "" {
 			t.Error("Expected X-LunaSentri-Signature header")
@@ -157,7 +157,7 @@ func TestNotifier_Send_Success(t *testing.T) {
 	store := newMockStore()
 	secret := "test-secret"
 	secretHash := storage.HashSecret(secret)
-	
+
 	store.users = []storage.User{{ID: 1, Email: "test@example.com"}}
 	store.webhooks[1] = []storage.Webhook{
 		{
@@ -242,7 +242,7 @@ func TestNotifier_Send_Failure_And_Retry(t *testing.T) {
 	store := newMockStore()
 	secret := "test-secret"
 	secretHash := storage.HashSecret(secret)
-	
+
 	store.users = []storage.User{{ID: 1, Email: "test@example.com"}}
 	store.webhooks[1] = []storage.Webhook{
 		{
@@ -297,7 +297,7 @@ func TestNotifier_Send_MaxRetries_Exceeded(t *testing.T) {
 	store := newMockStore()
 	secret := "test-secret"
 	secretHash := storage.HashSecret(secret)
-	
+
 	store.users = []storage.User{{ID: 1, Email: "test@example.com"}}
 	store.webhooks[1] = []storage.Webhook{
 		{
@@ -349,7 +349,7 @@ func TestNotifier_Send_Context_Cancellation(t *testing.T) {
 	store := newMockStore()
 	secret := "test-secret"
 	secretHash := storage.HashSecret(secret)
-	
+
 	store.users = []storage.User{{ID: 1, Email: "test@example.com"}}
 	store.webhooks[1] = []storage.Webhook{
 		{
@@ -386,7 +386,7 @@ func TestNotifier_Send_Context_Cancellation(t *testing.T) {
 
 func TestNotifier_CreateSignature(t *testing.T) {
 	notifier := NewNotifier(newMockStore(), log.Default())
-	
+
 	payload := []byte(`{"test": "data"}`)
 	secret := "test-secret"
 	secretHash := storage.HashSecret(secret)

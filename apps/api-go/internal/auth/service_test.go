@@ -184,10 +184,10 @@ func (m *mockStore) ListAlertEvents(ctx context.Context, limit int) ([]storage.A
 
 func (m *mockStore) CreateAlertEvent(ctx context.Context, ruleID int, value float64) (*storage.AlertEvent, error) {
 	return &storage.AlertEvent{
-		ID:          1,
-		RuleID:      ruleID,
-		TriggeredAt: time.Now(),
-		Value:       value,
+		ID:           1,
+		RuleID:       ruleID,
+		TriggeredAt:  time.Now(),
+		Value:        value,
 		Acknowledged: false,
 	}, nil
 }
@@ -198,7 +198,7 @@ func (m *mockStore) AckAlertEvent(ctx context.Context, id int) error {
 
 // Webhook methods
 func (m *mockStore) CreateWebhook(ctx context.Context, userID int, url string, secretHash string) (*storage.Webhook, error) {
-	return &storage.Webhook{ID: 1, UserID: userID, URL: url, SecretHash: []byte(secretHash), IsActive: true}, nil
+	return &storage.Webhook{ID: 1, UserID: userID, URL: url, SecretHash: secretHash, IsActive: true}, nil
 }
 
 func (m *mockStore) ListWebhooks(ctx context.Context, userID int) ([]storage.Webhook, error) {
@@ -213,11 +213,11 @@ func (m *mockStore) DeleteWebhook(ctx context.Context, id int, userID int) error
 	return nil
 }
 
-func (m *mockStore) IncrementWebhookFailure(ctx context.Context, webhookID int) error {
+func (m *mockStore) IncrementWebhookFailure(ctx context.Context, webhookID int, lastErrorAt time.Time) error {
 	return nil
 }
 
-func (m *mockStore) MarkWebhookSuccess(ctx context.Context, webhookID int) error {
+func (m *mockStore) MarkWebhookSuccess(ctx context.Context, webhookID int, lastSuccessAt time.Time) error {
 	return nil
 }
 

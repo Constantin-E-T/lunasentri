@@ -199,7 +199,7 @@ func TestAlertService_Evaluate_MultipleRules(t *testing.T) {
 
 	// Sample that triggers both rules
 	sample := metrics.Metrics{
-		CPUPct:      85.0, // Above 80% 
+		CPUPct:      85.0, // Above 80%
 		MemUsedPct:  95.0, // Above 90%
 		DiskUsedPct: 30.0,
 	}

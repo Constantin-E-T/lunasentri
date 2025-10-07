@@ -37,6 +37,16 @@ func (f *fakeSystemService) GetSystemInfo(ctx context.Context) (system.SystemInf
 	return f.systemInfoToReturn, f.errToReturn
 }
 
+// createTestStore creates a store for testing
+func createTestStore(t *testing.T) storage.Store {
+	// Create in-memory SQLite store
+	store, err := storage.NewSQLiteStore("file::memory:?cache=shared")
+	if err != nil {
+		t.Fatalf("Failed to create test store: %v", err)
+	}
+	return store
+}
+
 // createTestAuthService creates an auth service for testing
 func createTestAuthService(t *testing.T) *auth.Service {
 	// Create in-memory SQLite store
@@ -98,6 +108,7 @@ func TestSystemInfoHandler(t *testing.T) {
 	}
 
 	// Create test services
+	store := createTestStore(t)
 	authService := createTestAuthService(t)
 	alertService := createTestAlertService(t)
 	collector := &fakeCollector{
@@ -106,7 +117,7 @@ func TestSystemInfoHandler(t *testing.T) {
 	}
 
 	// Create server
-	mux := newServer(collector, time.Now(), authService, alertService, systemService, 15*time.Minute, 15*time.Minute, false)
+	mux := newServer(collector, time.Now(), authService, alertService, systemService, store, 15*time.Minute, 15*time.Minute, false)
 	server := httptest.NewServer(corsMiddleware(mux))
 	defer server.Close()
 
@@ -159,6 +170,7 @@ func TestSystemInfoHandlerError(t *testing.T) {
 	}
 
 	// Create test services
+	store := createTestStore(t)
 	authService := createTestAuthService(t)
 	alertService := createTestAlertService(t)
 	collector := &fakeCollector{
@@ -167,7 +179,7 @@ func TestSystemInfoHandlerError(t *testing.T) {
 	}
 
 	// Create server
-	mux := newServer(collector, time.Now(), authService, alertService, systemService, 15*time.Minute, 15*time.Minute, false)
+	mux := newServer(collector, time.Now(), authService, alertService, systemService, store, 15*time.Minute, 15*time.Minute, false)
 	server := httptest.NewServer(corsMiddleware(mux))
 	defer server.Close()
 
@@ -194,6 +206,7 @@ func TestSystemInfoHandlerMethodNotAllowed(t *testing.T) {
 	}
 
 	// Create test services
+	store := createTestStore(t)
 	authService := createTestAuthService(t)
 	alertService := createTestAlertService(t)
 	collector := &fakeCollector{
@@ -202,7 +215,7 @@ func TestSystemInfoHandlerMethodNotAllowed(t *testing.T) {
 	}
 
 	// Create server
-	mux := newServer(collector, time.Now(), authService, alertService, systemService, 15*time.Minute, 15*time.Minute, false)
+	mux := newServer(collector, time.Now(), authService, alertService, systemService, store, 15*time.Minute, 15*time.Minute, false)
 	server := httptest.NewServer(corsMiddleware(mux))
 	defer server.Close()
 

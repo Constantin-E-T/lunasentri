@@ -131,90 +131,90 @@ func TestSQLiteStore_GetUserByEmail_NotFound(t *testing.T) {
 }
 
 func TestSQLiteStore_UpdateUserPassword(t *testing.T) {
-    store, err := NewSQLiteStore("file::memory:?cache=shared")
-    if err != nil {
-        t.Fatalf("Failed to create test store: %v", err)
-    }
-    defer store.Close()
+	store, err := NewSQLiteStore("file::memory:?cache=shared")
+	if err != nil {
+		t.Fatalf("Failed to create test store: %v", err)
+	}
+	defer store.Close()
 
-    ctx := context.Background()
-    user, err := store.CreateUser(ctx, "update@example.com", "oldhash")
-    if err != nil {
-        t.Fatalf("Failed to create user: %v", err)
-    }
+	ctx := context.Background()
+	user, err := store.CreateUser(ctx, "update@example.com", "oldhash")
+	if err != nil {
+		t.Fatalf("Failed to create user: %v", err)
+	}
 
-    if err := store.UpdateUserPassword(ctx, user.ID, "newhash"); err != nil {
-        t.Fatalf("UpdateUserPassword failed: %v", err)
-    }
+	if err := store.UpdateUserPassword(ctx, user.ID, "newhash"); err != nil {
+		t.Fatalf("UpdateUserPassword failed: %v", err)
+	}
 
-    updated, err := store.GetUserByEmail(ctx, "update@example.com")
-    if err != nil {
-        t.Fatalf("Failed to retrieve user: %v", err)
-    }
+	updated, err := store.GetUserByEmail(ctx, "update@example.com")
+	if err != nil {
+		t.Fatalf("Failed to retrieve user: %v", err)
+	}
 
-    if updated.PasswordHash != "newhash" {
-        t.Errorf("Expected password hash 'newhash', got %s", updated.PasswordHash)
-    }
+	if updated.PasswordHash != "newhash" {
+		t.Errorf("Expected password hash 'newhash', got %s", updated.PasswordHash)
+	}
 }
 
 func TestSQLiteStore_PasswordResetLifecycle(t *testing.T) {
-    store, err := NewSQLiteStore("file::memory:?cache=shared")
-    if err != nil {
-        t.Fatalf("Failed to create test store: %v", err)
-    }
-    defer store.Close()
+	store, err := NewSQLiteStore("file::memory:?cache=shared")
+	if err != nil {
+		t.Fatalf("Failed to create test store: %v", err)
+	}
+	defer store.Close()
 
-    ctx := context.Background()
-    user, err := store.CreateUser(ctx, "reset@example.com", "hash")
-    if err != nil {
-        t.Fatalf("Failed to create user: %v", err)
-    }
+	ctx := context.Background()
+	user, err := store.CreateUser(ctx, "reset@example.com", "hash")
+	if err != nil {
+		t.Fatalf("Failed to create user: %v", err)
+	}
 
-    expiresAt := time.Now().Add(time.Hour)
-    pr, err := store.CreatePasswordReset(ctx, user.ID, "tokenhash", expiresAt)
-    if err != nil {
-        t.Fatalf("CreatePasswordReset failed: %v", err)
-    }
+	expiresAt := time.Now().Add(time.Hour)
+	pr, err := store.CreatePasswordReset(ctx, user.ID, "tokenhash", expiresAt)
+	if err != nil {
+		t.Fatalf("CreatePasswordReset failed: %v", err)
+	}
 
-    fetched, err := store.GetPasswordResetByHash(ctx, "tokenhash")
-    if err != nil {
-        t.Fatalf("GetPasswordResetByHash failed: %v", err)
-    }
-    if fetched.ID != pr.ID {
-        t.Errorf("Expected password reset ID %d, got %d", pr.ID, fetched.ID)
-    }
+	fetched, err := store.GetPasswordResetByHash(ctx, "tokenhash")
+	if err != nil {
+		t.Fatalf("GetPasswordResetByHash failed: %v", err)
+	}
+	if fetched.ID != pr.ID {
+		t.Errorf("Expected password reset ID %d, got %d", pr.ID, fetched.ID)
+	}
 
-    if err := store.MarkPasswordResetUsed(ctx, pr.ID); err != nil {
-        t.Fatalf("MarkPasswordResetUsed failed: %v", err)
-    }
+	if err := store.MarkPasswordResetUsed(ctx, pr.ID); err != nil {
+		t.Fatalf("MarkPasswordResetUsed failed: %v", err)
+	}
 
-    if _, err := store.GetPasswordResetByHash(ctx, "tokenhash"); err == nil {
-        t.Fatal("Expected error when fetching used password reset token")
-    }
+	if _, err := store.GetPasswordResetByHash(ctx, "tokenhash"); err == nil {
+		t.Fatal("Expected error when fetching used password reset token")
+	}
 }
 
 func TestSQLiteStore_PasswordResetExpiry(t *testing.T) {
-    store, err := NewSQLiteStore("file::memory:?cache=shared")
-    if err != nil {
-        t.Fatalf("Failed to create test store: %v", err)
-    }
-    defer store.Close()
+	store, err := NewSQLiteStore("file::memory:?cache=shared")
+	if err != nil {
+		t.Fatalf("Failed to create test store: %v", err)
+	}
+	defer store.Close()
 
-    ctx := context.Background()
-    user, err := store.CreateUser(ctx, "expired@example.com", "hash")
-    if err != nil {
-        t.Fatalf("Failed to create user: %v", err)
-    }
+	ctx := context.Background()
+	user, err := store.CreateUser(ctx, "expired@example.com", "hash")
+	if err != nil {
+		t.Fatalf("Failed to create user: %v", err)
+	}
 
-    expiresAt := time.Now().Add(-time.Hour)
-    _, err = store.CreatePasswordReset(ctx, user.ID, "expired-token", expiresAt)
-    if err != nil {
-        t.Fatalf("CreatePasswordReset failed: %v", err)
-    }
+	expiresAt := time.Now().Add(-time.Hour)
+	_, err = store.CreatePasswordReset(ctx, user.ID, "expired-token", expiresAt)
+	if err != nil {
+		t.Fatalf("CreatePasswordReset failed: %v", err)
+	}
 
-    if _, err := store.GetPasswordResetByHash(ctx, "expired-token"); err == nil {
-        t.Fatal("Expected error for expired token")
-    }
+	if _, err := store.GetPasswordResetByHash(ctx, "expired-token"); err == nil {
+		t.Fatal("Expected error for expired token")
+	}
 }
 
 func TestSQLiteStore_MigrationIdempotency(t *testing.T) {

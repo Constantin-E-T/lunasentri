@@ -10,9 +10,9 @@ import (
 
 // Service provides authentication operations
 type Service struct {
-	store      storage.Store
-	jwtSecret  []byte
-	accessTTL  time.Duration
+	store     storage.Store
+	jwtSecret []byte
+	accessTTL time.Duration
 }
 
 // NewService creates a new authentication service

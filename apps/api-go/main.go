@@ -45,11 +45,11 @@ func evaluateAlerts(alertService *alerts.Service, metricsData metrics.Metrics) {
 	if alertService == nil {
 		return
 	}
-	
+
 	// Use a short-lived background context to avoid cancellation issues
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 	defer cancel()
-	
+
 	if err := alertService.Evaluate(ctx, metricsData); err != nil {
 		log.Printf("Failed to evaluate alerts: %v", err)
 	}
@@ -641,7 +641,7 @@ func handleSystemInfo(systemService system.Service) http.HandlerFunc {
 }
 
 // newServer creates a new HTTP server with the given collector, auth service, alert service, and system service
-func newServer(collector metrics.Collector, startTime time.Time, authService *auth.Service, alertService *alerts.Service, systemService system.Service, accessTTL time.Duration, passwordResetTTL time.Duration, secureCookie bool) *http.ServeMux {
+func newServer(collector metrics.Collector, startTime time.Time, authService *auth.Service, alertService *alerts.Service, systemService system.Service, store storage.Store, accessTTL time.Duration, passwordResetTTL time.Duration, secureCookie bool) *http.ServeMux {
 	// Create a new ServeMux
 	mux := http.NewServeMux()
 
@@ -719,6 +719,26 @@ func newServer(collector metrics.Collector, startTime time.Time, authService *au
 	mux.Handle("/alerts/events", authService.RequireAuth(handleAlertEvents(alertService)))
 	mux.Handle("/alerts/events/", authService.RequireAuth(handleAlertEventAck(alertService)))
 
+	// Webhook notification endpoints (protected)
+	mux.Handle("/notifications/webhooks", authService.RequireAuth(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodGet {
+			notifications.HandleListWebhooks(store)(w, r)
+		} else if r.Method == http.MethodPost {
+			notifications.HandleCreateWebhook(store)(w, r)
+		} else {
+			http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		}
+	})))
+	mux.Handle("/notifications/webhooks/", authService.RequireAuth(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodPut {
+			notifications.HandleUpdateWebhook(store)(w, r)
+		} else if r.Method == http.MethodDelete {
+			notifications.HandleDeleteWebhook(store)(w, r)
+		} else {
+			http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		}
+	})))
+
 	return mux
 }
 
@@ -785,7 +805,7 @@ func validateAlertRule(req *AlertRuleRequest) error {
 func handleAlertRules(alertService *alerts.Service) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
-		
+
 		switch r.Method {
 		case "GET":
 			rules, err := alertService.ListRules(r.Context())
@@ -794,37 +814,37 @@ func handleAlertRules(alertService *alerts.Service) http.HandlerFunc {
 				http.Error(w, "Internal Server Error", http.StatusInternalServerError)
 				return
 			}
-			
+
 			if err := json.NewEncoder(w).Encode(rules); err != nil {
 				http.Error(w, "Internal Server Error", http.StatusInternalServerError)
 				return
 			}
-			
+
 		case "POST":
 			var req AlertRuleRequest
 			if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 				http.Error(w, "Invalid JSON", http.StatusBadRequest)
 				return
 			}
-			
+
 			if err := validateAlertRule(&req); err != nil {
 				http.Error(w, err.Error(), http.StatusBadRequest)
 				return
 			}
-			
+
 			rule, err := alertService.UpsertRule(r.Context(), 0, req.Name, req.Metric, req.Comparison, req.ThresholdPct, req.TriggerAfter)
 			if err != nil {
 				log.Printf("Failed to create alert rule: %v", err)
 				http.Error(w, "Internal Server Error", http.StatusInternalServerError)
 				return
 			}
-			
+
 			w.WriteHeader(http.StatusCreated)
 			if err := json.NewEncoder(w).Encode(rule); err != nil {
 				http.Error(w, "Internal Server Error", http.StatusInternalServerError)
 				return
 			}
-			
+
 		default:
 			http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
 		}
@@ -835,20 +855,20 @@ func handleAlertRules(alertService *alerts.Service) http.HandlerFunc {
 func handleAlertRule(alertService *alerts.Service) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
-		
+
 		// Extract ID from path
 		path := strings.TrimPrefix(r.URL.Path, "/alerts/rules/")
 		if path == "" {
 			http.Error(w, "Alert rule ID required", http.StatusBadRequest)
 			return
 		}
-		
+
 		id, err := strconv.Atoi(path)
 		if err != nil {
 			http.Error(w, "Invalid alert rule ID", http.StatusBadRequest)
 			return
 		}
-		
+
 		switch r.Method {
 		case "PUT":
 			var req AlertRuleRequest
@@ -856,12 +876,12 @@ func handleAlertRule(alertService *alerts.Service) http.HandlerFunc {
 				http.Error(w, "Invalid JSON", http.StatusBadRequest)
 				return
 			}
-			
+
 			if err := validateAlertRule(&req); err != nil {
 				http.Error(w, err.Error(), http.StatusBadRequest)
 				return
 			}
-			
+
 			rule, err := alertService.UpsertRule(r.Context(), id, req.Name, req.Metric, req.Comparison, req.ThresholdPct, req.TriggerAfter)
 			if err != nil {
 				if strings.Contains(err.Error(), "not found") {
@@ -872,12 +892,12 @@ func handleAlertRule(alertService *alerts.Service) http.HandlerFunc {
 				}
 				return
 			}
-			
+
 			if err := json.NewEncoder(w).Encode(rule); err != nil {
 				http.Error(w, "Internal Server Error", http.StatusInternalServerError)
 				return
 			}
-			
+
 		case "DELETE":
 			if err := alertService.DeleteRule(r.Context(), id); err != nil {
 				if strings.Contains(err.Error(), "not found") {
@@ -888,9 +908,9 @@ func handleAlertRule(alertService *alerts.Service) http.HandlerFunc {
 				}
 				return
 			}
-			
+
 			w.WriteHeader(http.StatusNoContent)
-			
+
 		default:
 			http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
 		}
@@ -904,9 +924,9 @@ func handleAlertEvents(alertService *alerts.Service) http.HandlerFunc {
 			http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
 			return
 		}
-		
+
 		w.Header().Set("Content-Type", "application/json")
-		
+
 		// Default limit to 50, can be overridden by query param
 		limit := 50
 		if limitStr := r.URL.Query().Get("limit"); limitStr != "" {
@@ -914,14 +934,14 @@ func handleAlertEvents(alertService *alerts.Service) http.HandlerFunc {
 				limit = parsedLimit
 			}
 		}
-		
+
 		events, err := alertService.ListActiveEvents(r.Context(), limit)
 		if err != nil {
 			log.Printf("Failed to list alert events: %v", err)
 			http.Error(w, "Internal Server Error", http.StatusInternalServerError)
 			return
 		}
-		
+
 		if err := json.NewEncoder(w).Encode(events); err != nil {
 			http.Error(w, "Internal Server Error", http.StatusInternalServerError)
 			return
@@ -936,26 +956,26 @@ func handleAlertEventAck(alertService *alerts.Service) http.HandlerFunc {
 			http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
 			return
 		}
-		
+
 		// Extract ID from path - expecting /alerts/events/{id}/ack
 		path := strings.TrimPrefix(r.URL.Path, "/alerts/events/")
 		if !strings.HasSuffix(path, "/ack") {
 			http.Error(w, "Invalid path", http.StatusBadRequest)
 			return
 		}
-		
+
 		idStr := strings.TrimSuffix(path, "/ack")
 		if idStr == "" {
 			http.Error(w, "Alert event ID required", http.StatusBadRequest)
 			return
 		}
-		
+
 		id, err := strconv.Atoi(idStr)
 		if err != nil {
 			http.Error(w, "Invalid alert event ID", http.StatusBadRequest)
 			return
 		}
-		
+
 		if err := alertService.AcknowledgeEvent(r.Context(), id); err != nil {
 			if strings.Contains(err.Error(), "not found") || strings.Contains(err.Error(), "already acknowledged") {
 				http.Error(w, "Alert event not found or already acknowledged", http.StatusNotFound)
@@ -965,7 +985,7 @@ func handleAlertEventAck(alertService *alerts.Service) http.HandlerFunc {
 			}
 			return
 		}
-		
+
 		w.WriteHeader(http.StatusNoContent)
 	}
 }
@@ -1054,7 +1074,7 @@ func main() {
 	alertService := alerts.NewService(store, webhookNotifier)
 
 	// Create server with real collector, auth service, alert service, and system service
-	mux := newServer(metricsCollector, serverStartTime, authService, alertService, systemService, accessTTL, passwordResetTTL, secureCookie)
+	mux := newServer(metricsCollector, serverStartTime, authService, alertService, systemService, store, accessTTL, passwordResetTTL, secureCookie)
 
 	// Create HTTP server with CORS middleware
 	port := "8080"

@@ -19,13 +19,13 @@ type AlertNotifier interface {
 
 // Service handles alert rule evaluation and event management
 type Service struct {
-	store        storage.Store
-	notifier     AlertNotifier
-	mu           sync.RWMutex
-	ruleStates   map[int]*RuleState // rule ID -> current state
-	rulesCache   []storage.AlertRule
-	lastRefresh  time.Time
-	refreshTTL   time.Duration
+	store       storage.Store
+	notifier    AlertNotifier
+	mu          sync.RWMutex
+	ruleStates  map[int]*RuleState // rule ID -> current state
+	rulesCache  []storage.AlertRule
+	lastRefresh time.Time
+	refreshTTL  time.Duration
 }
 
 // RuleState tracks the consecutive breach count for a rule
@@ -38,10 +38,10 @@ type RuleState struct {
 // NewService creates a new alert service
 func NewService(store storage.Store, notifier AlertNotifier) *Service {
 	return &Service{
-		store:       store,
-		notifier:    notifier,
-		ruleStates:  make(map[int]*RuleState),
-		refreshTTL:  30 * time.Second, // Refresh rules every 30 seconds
+		store:      store,
+		notifier:   notifier,
+		ruleStates: make(map[int]*RuleState),
+		refreshTTL: 30 * time.Second, // Refresh rules every 30 seconds
 	}
 }
 
@@ -95,7 +95,7 @@ func (s *Service) Evaluate(ctx context.Context, sample metrics.Metrics) error {
 
 	for _, rule := range s.rulesCache {
 		value := s.getMetricValue(sample, rule.Metric)
-		
+
 		// Get or create rule state
 		state, exists := s.ruleStates[rule.ID]
 		if !exists {
@@ -111,7 +111,7 @@ func (s *Service) Evaluate(ctx context.Context, sample metrics.Metrics) error {
 
 		if breached {
 			state.ConsecutiveBreaches++
-			
+
 			// Fire alert if we've reached the trigger threshold
 			if state.ConsecutiveBreaches == rule.TriggerAfter {
 				if err := s.fireAlert(ctx, &rule, value); err != nil {
@@ -121,7 +121,7 @@ func (s *Service) Evaluate(ctx context.Context, sample metrics.Metrics) error {
 		} else {
 			// Reset consecutive breaches when metric recovers
 			if state.ConsecutiveBreaches > 0 {
-				log.Printf("[ALERT] Rule '%s' recovered: %s=%.1f (was breached %d times)", 
+				log.Printf("[ALERT] Rule '%s' recovered: %s=%.1f (was breached %d times)",
 					rule.Name, rule.Metric, value, state.ConsecutiveBreaches)
 			}
 			state.ConsecutiveBreaches = 0
@@ -164,7 +164,7 @@ func (s *Service) fireAlert(ctx context.Context, rule *storage.AlertRule, value 
 		return fmt.Errorf("failed to create alert event: %w", err)
 	}
 
-	log.Printf("[ALERT] %s %s %.1f%% for %d samples (value=%.1f) - Event ID: %d", 
+	log.Printf("[ALERT] %s %s %.1f%% for %d samples (value=%.1f) - Event ID: %d",
 		rule.Name, rule.Comparison, rule.ThresholdPct, rule.TriggerAfter, value, event.ID)
 
 	// Send notifications asynchronously if notifier is available
@@ -196,12 +196,12 @@ func (s *Service) UpsertRule(ctx context.Context, id int, name, metric, comparis
 		if err != nil {
 			return nil, err
 		}
-		
+
 		// Reset rule state cache to pick up new rule
 		s.mu.Lock()
 		s.lastRefresh = time.Time{}
 		s.mu.Unlock()
-		
+
 		return rule, nil
 	} else {
 		// Update existing rule
@@ -209,13 +209,13 @@ func (s *Service) UpsertRule(ctx context.Context, id int, name, metric, comparis
 		if err != nil {
 			return nil, err
 		}
-		
+
 		// Reset state for updated rule
 		s.mu.Lock()
 		delete(s.ruleStates, id)
 		s.lastRefresh = time.Time{}
 		s.mu.Unlock()
-		
+
 		return rule, nil
 	}
 }
@@ -226,13 +226,13 @@ func (s *Service) DeleteRule(ctx context.Context, id int) error {
 	if err != nil {
 		return err
 	}
-	
+
 	// Clean up rule state
 	s.mu.Lock()
 	delete(s.ruleStates, id)
 	s.lastRefresh = time.Time{}
 	s.mu.Unlock()
-	
+
 	return nil
 }
 
@@ -253,7 +253,7 @@ func (s *Service) AcknowledgeEvent(ctx context.Context, eventID int) error {
 func (s *Service) GetRuleStates() map[int]RuleState {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
-	
+
 	states := make(map[int]RuleState)
 	for id, state := range s.ruleStates {
 		states[id] = *state
