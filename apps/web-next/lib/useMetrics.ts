@@ -3,6 +3,14 @@
 import { useEffect, useState, useRef, useCallback } from 'react';
 import { fetchMetrics, type Metrics } from './api';
 
+export interface MetricSample {
+    timestamp: number;
+    cpu_pct: number;
+    mem_used_pct: number;
+    disk_used_pct: number;
+    uptime_s: number;
+}
+
 export interface UseMetricsOptions {
     /**
      * WebSocket URL for real-time streaming.
@@ -47,6 +55,9 @@ export interface UseMetricsReturn {
 
     /** Manual retry function */
     retry: () => void;
+
+    /** Rolling buffer of metrics history (last 60 samples) */
+    history: MetricSample[];
 }
 
 const DEFAULT_OPTIONS: Required<UseMetricsOptions> = {
@@ -81,6 +92,7 @@ export function useMetrics(options: UseMetricsOptions = {}): UseMetricsReturn {
     const [loading, setLoading] = useState(true);
     const [connectionType, setConnectionType] = useState<'websocket' | 'polling' | 'disconnected'>('disconnected');
     const [lastUpdate, setLastUpdate] = useState<Date | null>(null);
+    const [history, setHistory] = useState<MetricSample[]>([]);
 
     // Refs for cleanup and connection management
     const wsRef = useRef<WebSocket | null>(null);
@@ -89,15 +101,33 @@ export function useMetrics(options: UseMetricsOptions = {}): UseMetricsReturn {
     const pollTimeoutRef = useRef<NodeJS.Timeout | null>(null);
     const isMountedRef = useRef(true);
 
+    // Helper function to update metrics and history
+    const updateMetricsAndHistory = useCallback((newMetrics: Metrics) => {
+        const sample: MetricSample = {
+            timestamp: Date.now(),
+            cpu_pct: newMetrics.cpu_pct,
+            mem_used_pct: newMetrics.mem_used_pct,
+            disk_used_pct: newMetrics.disk_used_pct,
+            uptime_s: newMetrics.uptime_s,
+        };
+
+        setMetrics(newMetrics);
+        setHistory(prev => {
+            const newHistory = [...prev, sample];
+            // Keep only the last 60 samples
+            return newHistory.slice(-60);
+        });
+        setError(null);
+        setLoading(false);
+        setLastUpdate(new Date());
+    }, []);
+
     // WebSocket message handler
     const handleWebSocketMessage = useCallback((event: MessageEvent) => {
         try {
             const data: Metrics = JSON.parse(event.data);
             if (isMountedRef.current) {
-                setMetrics(data);
-                setError(null);
-                setLoading(false);
-                setLastUpdate(new Date());
+                updateMetricsAndHistory(data);
                 setConnectionType('websocket');
             }
         } catch (err) {
@@ -106,7 +136,7 @@ export function useMetrics(options: UseMetricsOptions = {}): UseMetricsReturn {
                 setError('Invalid data received from server');
             }
         }
-    }, []);
+    }, [updateMetricsAndHistory]);
 
     // WebSocket error handler
     const handleWebSocketError = useCallback((event: Event) => {
@@ -181,10 +211,7 @@ export function useMetrics(options: UseMetricsOptions = {}): UseMetricsReturn {
         try {
             const data = await fetchMetrics();
             if (isMountedRef.current) {
-                setMetrics(data);
-                setError(null);
-                setLoading(false);
-                setLastUpdate(new Date());
+                updateMetricsAndHistory(data);
                 setConnectionType('polling');
             }
         } catch (err) {
@@ -204,7 +231,7 @@ export function useMetrics(options: UseMetricsOptions = {}): UseMetricsReturn {
         if (isMountedRef.current) {
             pollTimeoutRef.current = setTimeout(poll, opts.pollInterval);
         }
-    }, [opts.pollInterval]);
+    }, [opts.pollInterval, updateMetricsAndHistory]);
 
     // Start polling fallback
     const startPolling = useCallback(() => {
@@ -268,5 +295,6 @@ export function useMetrics(options: UseMetricsOptions = {}): UseMetricsReturn {
         connectionType,
         lastUpdate,
         retry,
+        history,
     };
 }

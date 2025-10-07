@@ -1,6 +1,7 @@
 "use client";
 
 import { useMetrics } from "@/lib/useMetrics";
+import { MetricSparkline } from "@/components/charts/MetricSparkline";
 
 function formatUptime(seconds: number): string {
   const days = Math.floor(seconds / 86400);
@@ -59,7 +60,7 @@ function ConnectionStatus({
 }
 
 export function MetricsCard() {
-  const { metrics, error, loading, connectionType, lastUpdate, retry } =
+  const { metrics, error, loading, connectionType, lastUpdate, retry, history } =
     useMetrics();
 
   if (loading) {
@@ -107,10 +108,25 @@ export function MetricsCard() {
           />
         )}
       </div>
-      <div className="space-y-5">
-        <MetricRow label="CPU" value={metrics.cpu_pct} />
-        <MetricRow label="Memory" value={metrics.mem_used_pct} />
-        <MetricRow label="Disk" value={metrics.disk_used_pct} />
+      <div className="space-y-6">
+        {/* CPU Sparkline */}
+        {history.length > 0 && (
+          <div className="space-y-2">
+            <div className="flex justify-between items-center">
+              <span className="text-muted-foreground text-xs uppercase tracking-wide">CPU Trend</span>
+              <span className="text-foreground text-xs">Last 60 samples</span>
+            </div>
+            <MetricSparkline data={history} metric="cpu_pct" className="rounded-lg" />
+          </div>
+        )}
+        
+        {/* Current Metrics */}
+        <div className="space-y-5">
+          <MetricRow label="CPU" value={metrics.cpu_pct} />
+          <MetricRow label="Memory" value={metrics.mem_used_pct} />
+          <MetricRow label="Disk" value={metrics.disk_used_pct} />
+        </div>
+        
         <div className="pt-4 border-t border-border/40">
           <div className="flex justify-between items-center">
             <span className="text-muted-foreground text-sm">Uptime</span>
