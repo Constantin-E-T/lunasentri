@@ -45,21 +45,25 @@ interface AlertDialogCancelProps {
   children: React.ReactNode;
 }
 
-export function AlertDialog({ open, onOpenChange, children }: AlertDialogProps) {
+export function AlertDialog({
+  open,
+  onOpenChange,
+  children,
+}: AlertDialogProps) {
   if (!open) return null;
 
   return (
     <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4">
-      <div
-        className="fixed inset-0"
-        onClick={() => onOpenChange(false)}
-      />
+      <div className="fixed inset-0" onClick={() => onOpenChange(false)} />
       {children}
     </div>
   );
 }
 
-export function AlertDialogContent({ className, children }: AlertDialogContentProps) {
+export function AlertDialogContent({
+  className,
+  children,
+}: AlertDialogContentProps) {
   return (
     <div
       className={cn(
@@ -73,15 +77,17 @@ export function AlertDialogContent({ className, children }: AlertDialogContentPr
   );
 }
 
-export function AlertDialogHeader({ className, children }: AlertDialogHeaderProps) {
-  return (
-    <div className={cn("p-6 pb-4", className)}>
-      {children}
-    </div>
-  );
+export function AlertDialogHeader({
+  className,
+  children,
+}: AlertDialogHeaderProps) {
+  return <div className={cn("p-6 pb-4", className)}>{children}</div>;
 }
 
-export function AlertDialogFooter({ className, children }: AlertDialogFooterProps) {
+export function AlertDialogFooter({
+  className,
+  children,
+}: AlertDialogFooterProps) {
   return (
     <div className={cn("p-6 pt-4 flex gap-3 justify-end", className)}>
       {children}
@@ -89,7 +95,10 @@ export function AlertDialogFooter({ className, children }: AlertDialogFooterProp
   );
 }
 
-export function AlertDialogTitle({ className, children }: AlertDialogTitleProps) {
+export function AlertDialogTitle({
+  className,
+  children,
+}: AlertDialogTitleProps) {
   return (
     <h2 className={cn("text-lg font-semibold text-foreground", className)}>
       {children}
@@ -97,7 +106,10 @@ export function AlertDialogTitle({ className, children }: AlertDialogTitleProps)
   );
 }
 
-export function AlertDialogDescription({ className, children }: AlertDialogDescriptionProps) {
+export function AlertDialogDescription({
+  className,
+  children,
+}: AlertDialogDescriptionProps) {
   return (
     <p className={cn("text-sm text-muted-foreground mt-2", className)}>
       {children}
@@ -105,7 +117,12 @@ export function AlertDialogDescription({ className, children }: AlertDialogDescr
   );
 }
 
-export function AlertDialogAction({ className, onClick, disabled, children }: AlertDialogActionProps) {
+export function AlertDialogAction({
+  className,
+  onClick,
+  disabled,
+  children,
+}: AlertDialogActionProps) {
   return (
     <button
       onClick={onClick}
@@ -120,7 +137,11 @@ export function AlertDialogAction({ className, onClick, disabled, children }: Al
   );
 }
 
-export function AlertDialogCancel({ className, onClick, children }: AlertDialogCancelProps) {
+export function AlertDialogCancel({
+  className,
+  onClick,
+  children,
+}: AlertDialogCancelProps) {
   return (
     <button
       onClick={onClick}
