@@ -12,6 +12,12 @@ import {
 } from "lucide-react";
 import { useAlertsWithNotifications } from "@/lib/alerts";
 import type { AlertEvent, AlertRule } from "@/lib/alerts";
+import {
+  getEventSeverity,
+  getSeverityStyles,
+  getSeverityLabel,
+  type MetricType,
+} from "@/lib/alerts/severity";
 
 interface ActiveAlertsCardProps {
   events?: AlertEvent[];
@@ -51,14 +57,22 @@ function getMetricIcon(metric: string) {
   }
 }
 
-function getMetricBadgeStyle(metric: string) {
+function getMetricBadgeStyle(metric: string, severity?: string) {
+  // If we have severity information, use severity-based styling
+  if (severity) {
+    const severityLevel = severity as "ok" | "warn" | "critical";
+    const styles = getSeverityStyles(severityLevel);
+    return styles.badge;
+  }
+
+  // Fallback to metric-based styling for backward compatibility
   switch (metric) {
     case "cpu_pct":
-      return "bg-destructive/20 text-destructive border-destructive/30";
+      return "bg-red-500/20 text-red-400 border-red-500/30";
     case "mem_used_pct":
       return "bg-amber-500/20 text-amber-400 border-amber-500/30";
     case "disk_used_pct":
-      return "bg-primary/20 text-primary border-primary/30";
+      return "bg-blue-500/20 text-blue-400 border-blue-500/30";
     default:
       return "bg-muted/20 text-muted-foreground border-muted/30";
   }
@@ -108,6 +122,18 @@ export function ActiveAlertsCard({
               const rule = rules.find((r) => r.id === event.rule_id);
               const metric = rule?.metric || "unknown";
 
+              // Calculate severity for this event
+              const severity = rule
+                ? getEventSeverity(
+                    rule.metric as MetricType,
+                    event.value,
+                    rule.threshold_pct,
+                    rule.comparison
+                  )
+                : "warn";
+
+              const severityLabel = getSeverityLabel(severity);
+
               return (
                 <div
                   key={event.id}
@@ -115,7 +141,8 @@ export function ActiveAlertsCard({
                 >
                   <div
                     className={`flex items-center justify-center w-8 h-8 rounded-full border ${getMetricBadgeStyle(
-                      metric
+                      metric,
+                      severity
                     )}`}
                   >
                     {getMetricIcon(metric)}
@@ -125,9 +152,18 @@ export function ActiveAlertsCard({
                       <h4 className="text-sm font-medium text-foreground truncate">
                         {rule?.name || `Rule ${event.rule_id}`}
                       </h4>
-                      <div className="flex items-center gap-1 text-xs text-muted-foreground">
-                        <Clock className="h-3 w-3" />
-                        {formatRelativeTime(event.triggered_at)}
+                      <div className="flex items-center gap-2">
+                        <span
+                          className={`text-xs px-2 py-1 rounded-full border ${
+                            getSeverityStyles(severity).badge
+                          }`}
+                        >
+                          {severityLabel}
+                        </span>
+                        <div className="flex items-center gap-1 text-xs text-muted-foreground">
+                          <Clock className="h-3 w-3" />
+                          {formatRelativeTime(event.triggered_at)}
+                        </div>
                       </div>
                     </div>
                     <p className="text-xs text-muted-foreground mt-1">

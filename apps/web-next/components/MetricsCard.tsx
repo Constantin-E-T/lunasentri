@@ -2,6 +2,12 @@
 
 import { useMetrics } from "@/lib/useMetrics";
 import { MetricSparkline } from "@/components/dashboard";
+import {
+  getMetricSeverity,
+  getSeverityStyles,
+  getSeverityLabel,
+  type MetricType,
+} from "@/lib/alerts/severity";
 
 function formatUptime(seconds: number): string {
   const days = Math.floor(seconds / 86400);
@@ -141,9 +147,17 @@ export function MetricsCard() {
 
         {/* Current Metrics */}
         <div className="space-y-5">
-          <MetricRow label="CPU" value={metrics.cpu_pct} />
-          <MetricRow label="Memory" value={metrics.mem_used_pct} />
-          <MetricRow label="Disk" value={metrics.disk_used_pct} />
+          <MetricRow label="CPU" value={metrics.cpu_pct} metric="cpu_pct" />
+          <MetricRow
+            label="Memory"
+            value={metrics.mem_used_pct}
+            metric="mem_used_pct"
+          />
+          <MetricRow
+            label="Disk"
+            value={metrics.disk_used_pct}
+            metric="disk_used_pct"
+          />
         </div>
 
         <div className="pt-4 border-t border-border/40">
@@ -165,14 +179,13 @@ export function MetricsCard() {
 interface MetricRowProps {
   readonly label: string;
   readonly value: number;
+  readonly metric: MetricType;
 }
 
-function MetricRow({ label, value }: MetricRowProps) {
-  const getColor = (val: number) => {
-    if (val >= 80) return "bg-red-500";
-    if (val >= 60) return "bg-yellow-500";
-    return "bg-green-500";
-  };
+function MetricRow({ label, value, metric }: MetricRowProps) {
+  const severity = getMetricSeverity(metric, value);
+  const styles = getSeverityStyles(severity);
+  const severityLabel = getSeverityLabel(severity);
 
   return (
     <div>
@@ -180,15 +193,20 @@ function MetricRow({ label, value }: MetricRowProps) {
         <span className="text-muted-foreground text-sm tracking-wide uppercase">
           {label}
         </span>
-        <span className="text-foreground font-semibold">
-          {value.toFixed(1)}%
-        </span>
+        <div className="flex items-center gap-2">
+          <span className="text-foreground font-semibold">
+            {value.toFixed(1)}%
+          </span>
+          <span
+            className={`text-xs px-2 py-1 rounded-full border ${styles.badge}`}
+          >
+            {severityLabel}
+          </span>
+        </div>
       </div>
       <div className="w-full bg-border/40 rounded-full h-2 overflow-hidden">
         <div
-          className={`h-full ${getColor(
-            value
-          )} transition-all duration-500 ease-out`}
+          className={`h-full ${styles.progressBar} transition-all duration-500 ease-out`}
           style={{ width: `${Math.min(value, 100)}%` }}
         />
       </div>
