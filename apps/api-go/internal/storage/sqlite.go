@@ -28,6 +28,11 @@ func NewSQLiteStore(dbPath string) (*SQLiteStore, error) {
 		return nil, fmt.Errorf("failed to ping database: %w", err)
 	}
 
+	// Enable foreign key constraints
+	if _, err := db.Exec("PRAGMA foreign_keys = ON"); err != nil {
+		return nil, fmt.Errorf("failed to enable foreign keys: %w", err)
+	}
+
 	store := &SQLiteStore{db: db}
 
 	// Run migrations
@@ -83,6 +88,39 @@ func (s *SQLiteStore) migrate() error {
             version: "003_add_is_admin_to_users",
             sql: `
             ALTER TABLE users ADD COLUMN is_admin BOOLEAN DEFAULT 0 NOT NULL;
+            `,
+        },
+        {
+            version: "004_alert_rules",
+            sql: `
+            CREATE TABLE IF NOT EXISTS alert_rules (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                name TEXT NOT NULL,
+                metric TEXT NOT NULL CHECK (metric IN ('cpu_pct', 'mem_used_pct', 'disk_used_pct')),
+                threshold_pct REAL NOT NULL CHECK (threshold_pct >= 0 AND threshold_pct <= 100),
+                comparison TEXT NOT NULL CHECK (comparison IN ('above', 'below')),
+                trigger_after INTEGER NOT NULL CHECK (trigger_after >= 1),
+                created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+            );
+            CREATE INDEX IF NOT EXISTS idx_alert_rules_metric ON alert_rules(metric);
+            `,
+        },
+        {
+            version: "005_alert_events",
+            sql: `
+            CREATE TABLE IF NOT EXISTS alert_events (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                rule_id INTEGER NOT NULL,
+                triggered_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                value REAL NOT NULL,
+                acknowledged BOOLEAN DEFAULT 0 NOT NULL,
+                acknowledged_at DATETIME,
+                FOREIGN KEY(rule_id) REFERENCES alert_rules(id) ON DELETE CASCADE
+            );
+            CREATE INDEX IF NOT EXISTS idx_alert_events_rule_id ON alert_events(rule_id);
+            CREATE INDEX IF NOT EXISTS idx_alert_events_acknowledged ON alert_events(acknowledged);
+            CREATE INDEX IF NOT EXISTS idx_alert_events_triggered_at ON alert_events(triggered_at);
             `,
         },
     }
@@ -415,6 +453,170 @@ func (s *SQLiteStore) DeletePasswordResetsForUser(ctx context.Context, userID in
     if err != nil {
         return fmt.Errorf("failed to delete password resets: %w", err)
     }
+    return nil
+}
+
+// Alert Rules methods
+
+// ListAlertRules retrieves all alert rules
+func (s *SQLiteStore) ListAlertRules(ctx context.Context) ([]AlertRule, error) {
+    query := `SELECT id, name, metric, threshold_pct, comparison, trigger_after, created_at, updated_at 
+              FROM alert_rules ORDER BY created_at DESC`
+    
+    rows, err := s.db.QueryContext(ctx, query)
+    if err != nil {
+        return nil, fmt.Errorf("failed to query alert rules: %w", err)
+    }
+    defer rows.Close()
+
+    var rules []AlertRule
+    for rows.Next() {
+        var rule AlertRule
+        err := rows.Scan(&rule.ID, &rule.Name, &rule.Metric, &rule.ThresholdPct, 
+                        &rule.Comparison, &rule.TriggerAfter, &rule.CreatedAt, &rule.UpdatedAt)
+        if err != nil {
+            return nil, fmt.Errorf("failed to scan alert rule: %w", err)
+        }
+        rules = append(rules, rule)
+    }
+
+    if err = rows.Err(); err != nil {
+        return nil, fmt.Errorf("failed to iterate alert rules: %w", err)
+    }
+
+    return rules, nil
+}
+
+// CreateAlertRule creates a new alert rule
+func (s *SQLiteStore) CreateAlertRule(ctx context.Context, name, metric, comparison string, thresholdPct float64, triggerAfter int) (*AlertRule, error) {
+    now := time.Now()
+    query := `INSERT INTO alert_rules (name, metric, threshold_pct, comparison, trigger_after, created_at, updated_at)
+              VALUES (?, ?, ?, ?, ?, ?, ?)
+              RETURNING id, name, metric, threshold_pct, comparison, trigger_after, created_at, updated_at`
+
+    rule := &AlertRule{}
+    err := s.db.QueryRowContext(ctx, query, name, metric, thresholdPct, comparison, triggerAfter, now, now).Scan(
+        &rule.ID, &rule.Name, &rule.Metric, &rule.ThresholdPct, 
+        &rule.Comparison, &rule.TriggerAfter, &rule.CreatedAt, &rule.UpdatedAt)
+    if err != nil {
+        return nil, fmt.Errorf("failed to create alert rule: %w", err)
+    }
+
+    return rule, nil
+}
+
+// UpdateAlertRule updates an existing alert rule
+func (s *SQLiteStore) UpdateAlertRule(ctx context.Context, id int, name, metric, comparison string, thresholdPct float64, triggerAfter int) (*AlertRule, error) {
+    now := time.Now()
+    query := `UPDATE alert_rules 
+              SET name = ?, metric = ?, threshold_pct = ?, comparison = ?, trigger_after = ?, updated_at = ?
+              WHERE id = ?
+              RETURNING id, name, metric, threshold_pct, comparison, trigger_after, created_at, updated_at`
+
+    rule := &AlertRule{}
+    err := s.db.QueryRowContext(ctx, query, name, metric, thresholdPct, comparison, triggerAfter, now, id).Scan(
+        &rule.ID, &rule.Name, &rule.Metric, &rule.ThresholdPct, 
+        &rule.Comparison, &rule.TriggerAfter, &rule.CreatedAt, &rule.UpdatedAt)
+    if err != nil {
+        if err == sql.ErrNoRows {
+            return nil, fmt.Errorf("alert rule with id %d not found", id)
+        }
+        return nil, fmt.Errorf("failed to update alert rule: %w", err)
+    }
+
+    return rule, nil
+}
+
+// DeleteAlertRule deletes an alert rule (and cascades to delete related events)
+func (s *SQLiteStore) DeleteAlertRule(ctx context.Context, id int) error {
+    query := `DELETE FROM alert_rules WHERE id = ?`
+    res, err := s.db.ExecContext(ctx, query, id)
+    if err != nil {
+        return fmt.Errorf("failed to delete alert rule: %w", err)
+    }
+    
+    rows, err := res.RowsAffected()
+    if err != nil {
+        return fmt.Errorf("failed to verify deletion: %w", err)
+    }
+    if rows == 0 {
+        return fmt.Errorf("alert rule with id %d not found", id)
+    }
+
+    return nil
+}
+
+// Alert Events methods
+
+// ListAlertEvents retrieves recent alert events (unacknowledged first, limited)
+func (s *SQLiteStore) ListAlertEvents(ctx context.Context, limit int) ([]AlertEvent, error) {
+    query := `SELECT id, rule_id, triggered_at, value, acknowledged, acknowledged_at 
+              FROM alert_events 
+              ORDER BY acknowledged ASC, triggered_at DESC 
+              LIMIT ?`
+    
+    rows, err := s.db.QueryContext(ctx, query, limit)
+    if err != nil {
+        return nil, fmt.Errorf("failed to query alert events: %w", err)
+    }
+    defer rows.Close()
+
+    var events []AlertEvent
+    for rows.Next() {
+        var event AlertEvent
+        err := rows.Scan(&event.ID, &event.RuleID, &event.TriggeredAt, 
+                        &event.Value, &event.Acknowledged, &event.AcknowledgedAt)
+        if err != nil {
+            return nil, fmt.Errorf("failed to scan alert event: %w", err)
+        }
+        events = append(events, event)
+    }
+
+    if err = rows.Err(); err != nil {
+        return nil, fmt.Errorf("failed to iterate alert events: %w", err)
+    }
+
+    return events, nil
+}
+
+// CreateAlertEvent creates a new alert event
+func (s *SQLiteStore) CreateAlertEvent(ctx context.Context, ruleID int, value float64) (*AlertEvent, error) {
+    now := time.Now()
+    query := `INSERT INTO alert_events (rule_id, triggered_at, value, acknowledged)
+              VALUES (?, ?, ?, ?)
+              RETURNING id, rule_id, triggered_at, value, acknowledged, acknowledged_at`
+
+    event := &AlertEvent{}
+    err := s.db.QueryRowContext(ctx, query, ruleID, now, value, false).Scan(
+        &event.ID, &event.RuleID, &event.TriggeredAt, 
+        &event.Value, &event.Acknowledged, &event.AcknowledgedAt)
+    if err != nil {
+        return nil, fmt.Errorf("failed to create alert event: %w", err)
+    }
+
+    return event, nil
+}
+
+// AckAlertEvent acknowledges an alert event
+func (s *SQLiteStore) AckAlertEvent(ctx context.Context, id int) error {
+    now := time.Now()
+    query := `UPDATE alert_events 
+              SET acknowledged = 1, acknowledged_at = ?
+              WHERE id = ? AND acknowledged = 0`
+    
+    res, err := s.db.ExecContext(ctx, query, now, id)
+    if err != nil {
+        return fmt.Errorf("failed to acknowledge alert event: %w", err)
+    }
+    
+    rows, err := res.RowsAffected()
+    if err != nil {
+        return fmt.Errorf("failed to verify acknowledgment: %w", err)
+    }
+    if rows == 0 {
+        return fmt.Errorf("alert event with id %d not found or already acknowledged", id)
+    }
+
     return nil
 }
 

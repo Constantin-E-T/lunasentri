@@ -63,6 +63,17 @@ type Store interface {
     // DeletePasswordResetsForUser deletes all password reset tokens for a user
     DeletePasswordResetsForUser(ctx context.Context, userID int) error
 
+    // Alert Rules methods
+    ListAlertRules(ctx context.Context) ([]AlertRule, error)
+    CreateAlertRule(ctx context.Context, name, metric, comparison string, thresholdPct float64, triggerAfter int) (*AlertRule, error)
+    UpdateAlertRule(ctx context.Context, id int, name, metric, comparison string, thresholdPct float64, triggerAfter int) (*AlertRule, error)
+    DeleteAlertRule(ctx context.Context, id int) error
+
+    // Alert Events methods
+    ListAlertEvents(ctx context.Context, limit int) ([]AlertEvent, error)
+    CreateAlertEvent(ctx context.Context, ruleID int, value float64) (*AlertEvent, error)
+    AckAlertEvent(ctx context.Context, id int) error
+
 	// Close closes the storage connection
 	Close() error
 }
@@ -75,4 +86,26 @@ type PasswordReset struct {
     ExpiresAt time.Time  `json:"expires_at"`
     UsedAt    *time.Time `json:"used_at"`
     CreatedAt time.Time  `json:"created_at"`
+}
+
+// AlertRule represents an alert rule for monitoring metrics
+type AlertRule struct {
+    ID           int       `json:"id"`
+    Name         string    `json:"name"`
+    Metric       string    `json:"metric"`         // "cpu_pct", "mem_used_pct", "disk_used_pct"
+    ThresholdPct float64   `json:"threshold_pct"`
+    Comparison   string    `json:"comparison"`     // "above" | "below"
+    TriggerAfter int       `json:"trigger_after"`  // number of consecutive samples before firing
+    CreatedAt    time.Time `json:"created_at"`
+    UpdatedAt    time.Time `json:"updated_at"`
+}
+
+// AlertEvent represents an alert event triggered by a rule
+type AlertEvent struct {
+    ID             int        `json:"id"`
+    RuleID         int        `json:"rule_id"`
+    TriggeredAt    time.Time  `json:"triggered_at"`
+    Value          float64    `json:"value"`
+    Acknowledged   bool       `json:"acknowledged"`
+    AcknowledgedAt *time.Time `json:"acknowledged_at,omitempty"`
 }

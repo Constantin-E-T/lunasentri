@@ -142,6 +142,60 @@ func (m *mockStore) DeletePasswordResetsForUser(ctx context.Context, userID int)
 	return nil
 }
 
+// Alert Rules methods (stub implementations for testing)
+func (m *mockStore) ListAlertRules(ctx context.Context) ([]storage.AlertRule, error) {
+	return []storage.AlertRule{}, nil
+}
+
+func (m *mockStore) CreateAlertRule(ctx context.Context, name, metric, comparison string, thresholdPct float64, triggerAfter int) (*storage.AlertRule, error) {
+	return &storage.AlertRule{
+		ID:           1,
+		Name:         name,
+		Metric:       metric,
+		ThresholdPct: thresholdPct,
+		Comparison:   comparison,
+		TriggerAfter: triggerAfter,
+		CreatedAt:    time.Now(),
+		UpdatedAt:    time.Now(),
+	}, nil
+}
+
+func (m *mockStore) UpdateAlertRule(ctx context.Context, id int, name, metric, comparison string, thresholdPct float64, triggerAfter int) (*storage.AlertRule, error) {
+	return &storage.AlertRule{
+		ID:           id,
+		Name:         name,
+		Metric:       metric,
+		ThresholdPct: thresholdPct,
+		Comparison:   comparison,
+		TriggerAfter: triggerAfter,
+		CreatedAt:    time.Now(),
+		UpdatedAt:    time.Now(),
+	}, nil
+}
+
+func (m *mockStore) DeleteAlertRule(ctx context.Context, id int) error {
+	return nil
+}
+
+// Alert Events methods (stub implementations for testing)
+func (m *mockStore) ListAlertEvents(ctx context.Context, limit int) ([]storage.AlertEvent, error) {
+	return []storage.AlertEvent{}, nil
+}
+
+func (m *mockStore) CreateAlertEvent(ctx context.Context, ruleID int, value float64) (*storage.AlertEvent, error) {
+	return &storage.AlertEvent{
+		ID:          1,
+		RuleID:      ruleID,
+		TriggeredAt: time.Now(),
+		Value:       value,
+		Acknowledged: false,
+	}, nil
+}
+
+func (m *mockStore) AckAlertEvent(ctx context.Context, id int) error {
+	return nil
+}
+
 func (m *mockStore) Close() error {
 	return nil
 }
