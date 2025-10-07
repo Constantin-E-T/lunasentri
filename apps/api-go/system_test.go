@@ -62,7 +62,20 @@ func createTestAlertService(t *testing.T) *alerts.Service {
 		t.Fatalf("Failed to create test store: %v", err)
 	}
 
-	return alerts.NewService(store)
+	// Create a no-op notifier for testing
+	notifier := &noOpNotifier{}
+	return alerts.NewService(store, notifier)
+}
+
+// noOpNotifier is a test implementation that does nothing
+type noOpNotifier struct{}
+
+func (n *noOpNotifier) Send(ctx context.Context, rule storage.AlertRule, event storage.AlertEvent) error {
+	return nil
+}
+
+func (n *noOpNotifier) Notify(ctx context.Context, rule storage.AlertRule, event *storage.AlertEvent) error {
+	return nil
 }
 
 func TestSystemInfoHandler(t *testing.T) {

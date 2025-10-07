@@ -196,6 +196,31 @@ func (m *mockStore) AckAlertEvent(ctx context.Context, id int) error {
 	return nil
 }
 
+// Webhook methods
+func (m *mockStore) CreateWebhook(ctx context.Context, userID int, url string, secretHash string) (*storage.Webhook, error) {
+	return &storage.Webhook{ID: 1, UserID: userID, URL: url, SecretHash: []byte(secretHash), IsActive: true}, nil
+}
+
+func (m *mockStore) ListWebhooks(ctx context.Context, userID int) ([]storage.Webhook, error) {
+	return []storage.Webhook{}, nil
+}
+
+func (m *mockStore) UpdateWebhook(ctx context.Context, id int, userID int, url string, secretHash *string, isActive *bool) (*storage.Webhook, error) {
+	return &storage.Webhook{ID: id, UserID: userID, URL: url, IsActive: true}, nil
+}
+
+func (m *mockStore) DeleteWebhook(ctx context.Context, id int, userID int) error {
+	return nil
+}
+
+func (m *mockStore) IncrementWebhookFailure(ctx context.Context, webhookID int) error {
+	return nil
+}
+
+func (m *mockStore) MarkWebhookSuccess(ctx context.Context, webhookID int) error {
+	return nil
+}
+
 func (m *mockStore) Close() error {
 	return nil
 }

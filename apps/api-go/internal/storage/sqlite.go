@@ -123,6 +123,27 @@ func (s *SQLiteStore) migrate() error {
             CREATE INDEX IF NOT EXISTS idx_alert_events_triggered_at ON alert_events(triggered_at);
             `,
         },
+        {
+            version: "006_webhooks",
+            sql: `
+            CREATE TABLE IF NOT EXISTS webhooks (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id INTEGER NOT NULL,
+                url TEXT NOT NULL,
+                secret_hash TEXT NOT NULL,
+                is_active BOOLEAN DEFAULT 1 NOT NULL,
+                failure_count INTEGER DEFAULT 0 NOT NULL,
+                last_success_at DATETIME,
+                last_error_at DATETIME,
+                created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE,
+                UNIQUE(user_id, url)
+            );
+            CREATE INDEX IF NOT EXISTS idx_webhooks_user_id ON webhooks(user_id);
+            CREATE INDEX IF NOT EXISTS idx_webhooks_active ON webhooks(is_active);
+            `,
+        },
     }
 
 	// Apply each migration if not already applied
@@ -617,6 +638,182 @@ func (s *SQLiteStore) AckAlertEvent(ctx context.Context, id int) error {
         return fmt.Errorf("alert event with id %d not found or already acknowledged", id)
     }
 
+    return nil
+}
+
+// Webhook methods
+
+// ListWebhooks returns all webhooks for a specific user
+func (s *SQLiteStore) ListWebhooks(ctx context.Context, userID int) ([]Webhook, error) {
+    query := `SELECT id, user_id, url, secret_hash, is_active, failure_count, 
+              last_success_at, last_error_at, created_at, updated_at
+              FROM webhooks WHERE user_id = ?
+              ORDER BY created_at ASC`
+    
+    rows, err := s.db.QueryContext(ctx, query, userID)
+    if err != nil {
+        return nil, fmt.Errorf("failed to query webhooks: %w", err)
+    }
+    defer rows.Close()
+
+    var webhooks []Webhook
+    for rows.Next() {
+        var w Webhook
+        err := rows.Scan(&w.ID, &w.UserID, &w.URL, &w.SecretHash, &w.IsActive,
+                        &w.FailureCount, &w.LastSuccessAt, &w.LastErrorAt, 
+                        &w.CreatedAt, &w.UpdatedAt)
+        if err != nil {
+            return nil, fmt.Errorf("failed to scan webhook: %w", err)
+        }
+        webhooks = append(webhooks, w)
+    }
+
+    if err := rows.Err(); err != nil {
+        return nil, fmt.Errorf("failed to iterate webhooks: %w", err)
+    }
+
+    return webhooks, nil
+}
+
+// CreateWebhook creates a new webhook for a user
+func (s *SQLiteStore) CreateWebhook(ctx context.Context, userID int, url, secretHash string) (*Webhook, error) {
+    now := time.Now()
+    query := `INSERT INTO webhooks (user_id, url, secret_hash, is_active, failure_count, 
+              created_at, updated_at)
+              VALUES (?, ?, ?, 1, 0, ?, ?)
+              RETURNING id, user_id, url, secret_hash, is_active, failure_count,
+              last_success_at, last_error_at, created_at, updated_at`
+    
+    webhook := &Webhook{}
+    err := s.db.QueryRowContext(ctx, query, userID, url, secretHash, now, now).Scan(
+        &webhook.ID, &webhook.UserID, &webhook.URL, &webhook.SecretHash,
+        &webhook.IsActive, &webhook.FailureCount, &webhook.LastSuccessAt, 
+        &webhook.LastErrorAt, &webhook.CreatedAt, &webhook.UpdatedAt)
+    if err != nil {
+        return nil, fmt.Errorf("failed to create webhook: %w", err)
+    }
+
+    return webhook, nil
+}
+
+// UpdateWebhook updates an existing webhook
+func (s *SQLiteStore) UpdateWebhook(ctx context.Context, id int, userID int, url string, secretHash *string, isActive *bool) (*Webhook, error) {
+    now := time.Now()
+    
+    // Build dynamic query based on what fields are being updated
+    setParts := []string{"updated_at = ?"}
+    args := []interface{}{now}
+    
+    if url != "" {
+        setParts = append(setParts, "url = ?")
+        args = append(args, url)
+    }
+    
+    if secretHash != nil {
+        setParts = append(setParts, "secret_hash = ?")
+        args = append(args, *secretHash)
+    }
+    
+    if isActive != nil {
+        setParts = append(setParts, "is_active = ?")
+        args = append(args, *isActive)
+    }
+    
+    setClause := strings.Join(setParts, ", ")
+    query := fmt.Sprintf(`UPDATE webhooks SET %s WHERE id = ? AND user_id = ?`, setClause)
+    args = append(args, id, userID)
+    
+    res, err := s.db.ExecContext(ctx, query, args...)
+    if err != nil {
+        return nil, fmt.Errorf("failed to update webhook: %w", err)
+    }
+    
+    rows, err := res.RowsAffected()
+    if err != nil {
+        return nil, fmt.Errorf("failed to verify update: %w", err)
+    }
+    if rows == 0 {
+        return nil, fmt.Errorf("webhook with id %d not found for user %d", id, userID)
+    }
+    
+    // Return updated webhook
+    selectQuery := `SELECT id, user_id, url, secret_hash, is_active, failure_count,
+                    last_success_at, last_error_at, created_at, updated_at
+                    FROM webhooks WHERE id = ? AND user_id = ?`
+    
+    webhook := &Webhook{}
+    err = s.db.QueryRowContext(ctx, selectQuery, id, userID).Scan(
+        &webhook.ID, &webhook.UserID, &webhook.URL, &webhook.SecretHash,
+        &webhook.IsActive, &webhook.FailureCount, &webhook.LastSuccessAt,
+        &webhook.LastErrorAt, &webhook.CreatedAt, &webhook.UpdatedAt)
+    if err != nil {
+        return nil, fmt.Errorf("failed to fetch updated webhook: %w", err)
+    }
+    
+    return webhook, nil
+}
+
+// DeleteWebhook deletes a webhook for a user
+func (s *SQLiteStore) DeleteWebhook(ctx context.Context, id int, userID int) error {
+    query := `DELETE FROM webhooks WHERE id = ? AND user_id = ?`
+    
+    res, err := s.db.ExecContext(ctx, query, id, userID)
+    if err != nil {
+        return fmt.Errorf("failed to delete webhook: %w", err)
+    }
+    
+    rows, err := res.RowsAffected()
+    if err != nil {
+        return fmt.Errorf("failed to verify deletion: %w", err)
+    }
+    if rows == 0 {
+        return fmt.Errorf("webhook with id %d not found for user %d", id, userID)
+    }
+    
+    return nil
+}
+
+// IncrementWebhookFailure increments the failure count and updates last error time
+func (s *SQLiteStore) IncrementWebhookFailure(ctx context.Context, id int, lastErrorAt time.Time) error {
+    query := `UPDATE webhooks 
+              SET failure_count = failure_count + 1, last_error_at = ?, updated_at = ?
+              WHERE id = ?`
+    
+    res, err := s.db.ExecContext(ctx, query, lastErrorAt, time.Now(), id)
+    if err != nil {
+        return fmt.Errorf("failed to increment webhook failure: %w", err)
+    }
+    
+    rows, err := res.RowsAffected()
+    if err != nil {
+        return fmt.Errorf("failed to verify failure increment: %w", err)
+    }
+    if rows == 0 {
+        return fmt.Errorf("webhook with id %d not found", id)
+    }
+    
+    return nil
+}
+
+// MarkWebhookSuccess resets failure count and updates last success time
+func (s *SQLiteStore) MarkWebhookSuccess(ctx context.Context, id int, lastSuccessAt time.Time) error {
+    query := `UPDATE webhooks 
+              SET failure_count = 0, last_success_at = ?, updated_at = ?
+              WHERE id = ?`
+    
+    res, err := s.db.ExecContext(ctx, query, lastSuccessAt, time.Now(), id)
+    if err != nil {
+        return fmt.Errorf("failed to mark webhook success: %w", err)
+    }
+    
+    rows, err := res.RowsAffected()
+    if err != nil {
+        return fmt.Errorf("failed to verify success update: %w", err)
+    }
+    if rows == 0 {
+        return fmt.Errorf("webhook with id %d not found", id)
+    }
+    
     return nil
 }
 

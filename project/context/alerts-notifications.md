@@ -8,11 +8,11 @@
 - Require signed payloads + secret verification for every webhook POST.
 
 **Open Items**
-- Design DB schema for user-owned webhook configs.
-- Define alert payload contract and signature headers.
-- Decide retry/backoff policy and dead-letter handling.
+- Webhook storage: table scoped by user (url, secret_hash, last_success_at, last_error_at, is_active).
+- Payload contract: include rule + event fields (`rule_id`, `rule_name`, `metric`, `comparison`, `threshold_pct`, `value`, `triggered_at`, `server_id?` future) and HMAC signature header (`X-LunaSentri-Signature`).
+- Delivery policy: immediate attempt with 2 retries (exponential backoff), log failures for visibility.
 
 **Next Steps**
-- [ ] Draft backend task: webhook storage, notifier integration, signed delivery.
-- [ ] Draft frontend task: user settings UI for managing webhook URLs.
-- [ ] Add testing plan covering webhook delivery + signature validation.
+- [ ] Backend: implement webhook persistence, notifier, signed delivery, retry + logging.
+- [ ] Frontend: settings UI for managing webhook URLs/secrets + test payload action.
+- [ ] QA: integration tests for signature verification + notifier fan-out.

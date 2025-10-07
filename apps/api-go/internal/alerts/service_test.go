@@ -29,8 +29,21 @@ func setupTestAlertService(t *testing.T) (*Service, *storage.SQLiteStore) {
 		os.RemoveAll(tmpDir)
 	})
 
-	service := NewService(store)
+	// Create a no-op notifier for testing
+	notifier := &noOpNotifier{}
+	service := NewService(store, notifier)
 	return service, store
+}
+
+// noOpNotifier is a test implementation that does nothing
+type noOpNotifier struct{}
+
+func (n *noOpNotifier) Send(ctx context.Context, rule storage.AlertRule, event storage.AlertEvent) error {
+	return nil
+}
+
+func (n *noOpNotifier) Notify(ctx context.Context, rule storage.AlertRule, event *storage.AlertEvent) error {
+	return nil
 }
 
 func TestAlertService_Evaluate_AboveThreshold(t *testing.T) {

@@ -11,9 +11,16 @@ import (
 	"github.com/Constantin-E-T/lunasentri/apps/api-go/internal/storage"
 )
 
+// AlertNotifier defines the interface for sending alert notifications
+type AlertNotifier interface {
+	// Notify sends notifications for an alert event
+	Notify(ctx context.Context, rule storage.AlertRule, event *storage.AlertEvent) error
+}
+
 // Service handles alert rule evaluation and event management
 type Service struct {
 	store        storage.Store
+	notifier     AlertNotifier
 	mu           sync.RWMutex
 	ruleStates   map[int]*RuleState // rule ID -> current state
 	rulesCache   []storage.AlertRule
@@ -29,9 +36,10 @@ type RuleState struct {
 }
 
 // NewService creates a new alert service
-func NewService(store storage.Store) *Service {
+func NewService(store storage.Store, notifier AlertNotifier) *Service {
 	return &Service{
 		store:       store,
+		notifier:    notifier,
 		ruleStates:  make(map[int]*RuleState),
 		refreshTTL:  30 * time.Second, // Refresh rules every 30 seconds
 	}
@@ -158,6 +166,19 @@ func (s *Service) fireAlert(ctx context.Context, rule *storage.AlertRule, value 
 
 	log.Printf("[ALERT] %s %s %.1f%% for %d samples (value=%.1f) - Event ID: %d", 
 		rule.Name, rule.Comparison, rule.ThresholdPct, rule.TriggerAfter, value, event.ID)
+
+	// Send notifications asynchronously if notifier is available
+	if s.notifier != nil {
+		go func() {
+			// Create a timeout context for notification sending
+			notifyCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+			defer cancel()
+
+			if err := s.notifier.Notify(notifyCtx, *rule, event); err != nil {
+				log.Printf("[ALERT] Failed to send notifications for event %d: %v", event.ID, err)
+			}
+		}()
+	}
 
 	return nil
 }

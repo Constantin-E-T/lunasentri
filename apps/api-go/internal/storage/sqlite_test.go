@@ -802,3 +802,472 @@ func TestSQLiteStore_ListUsers_IncludesAdminFlag(t *testing.T) {
 		t.Error("Failed to find both admin and user in list")
 	}
 }
+
+// Webhook tests
+
+func TestSQLiteStore_CreateWebhook(t *testing.T) {
+	store, err := NewSQLiteStore("file::memory:?cache=shared")
+	if err != nil {
+		t.Fatalf("Failed to create test store: %v", err)
+	}
+	defer store.Close()
+
+	ctx := context.Background()
+
+	// Create a test user first
+	user, err := store.CreateUser(ctx, "test@example.com", "password_hash")
+	if err != nil {
+		t.Fatalf("Failed to create test user: %v", err)
+	}
+
+	// Test data
+	url := "https://example.com/webhook"
+	secretHash := HashSecret("my-secret")
+
+	// Test creating a webhook
+	webhook, err := store.CreateWebhook(ctx, user.ID, url, secretHash)
+	if err != nil {
+		t.Fatalf("Failed to create webhook: %v", err)
+	}
+
+	// Verify webhook data
+	if webhook.ID == 0 {
+		t.Error("Expected webhook ID to be set")
+	}
+	if webhook.UserID != user.ID {
+		t.Errorf("Expected user ID %d, got %d", user.ID, webhook.UserID)
+	}
+	if webhook.URL != url {
+		t.Errorf("Expected URL %s, got %s", url, webhook.URL)
+	}
+	if webhook.SecretHash != secretHash {
+		t.Errorf("Expected secret hash %s, got %s", secretHash, webhook.SecretHash)
+	}
+	if !webhook.IsActive {
+		t.Error("Expected webhook to be active by default")
+	}
+	if webhook.FailureCount != 0 {
+		t.Errorf("Expected failure count 0, got %d", webhook.FailureCount)
+	}
+	if webhook.CreatedAt.IsZero() {
+		t.Error("Expected created_at to be set")
+	}
+	if webhook.UpdatedAt.IsZero() {
+		t.Error("Expected updated_at to be set")
+	}
+}
+
+func TestSQLiteStore_CreateWebhook_UniqueConstraint(t *testing.T) {
+	store, err := NewSQLiteStore("file::memory:?cache=shared")
+	if err != nil {
+		t.Fatalf("Failed to create test store: %v", err)
+	}
+	defer store.Close()
+
+	ctx := context.Background()
+
+	// Create a test user
+	user, err := store.CreateUser(ctx, "test@example.com", "password_hash")
+	if err != nil {
+		t.Fatalf("Failed to create test user: %v", err)
+	}
+
+	url := "https://example.com/webhook"
+	secretHash := HashSecret("my-secret")
+
+	// Create first webhook
+	_, err = store.CreateWebhook(ctx, user.ID, url, secretHash)
+	if err != nil {
+		t.Fatalf("Failed to create first webhook: %v", err)
+	}
+
+	// Try to create duplicate webhook (same user_id, url)
+	_, err = store.CreateWebhook(ctx, user.ID, url, secretHash)
+	if err == nil {
+		t.Error("Expected error when creating duplicate webhook")
+	}
+}
+
+func TestSQLiteStore_ListWebhooks(t *testing.T) {
+	store, err := NewSQLiteStore("file::memory:?cache=shared")
+	if err != nil {
+		t.Fatalf("Failed to create test store: %v", err)
+	}
+	defer store.Close()
+
+	ctx := context.Background()
+
+	// Create test users
+	user1, err := store.CreateUser(ctx, "user1@example.com", "password_hash")
+	if err != nil {
+		t.Fatalf("Failed to create user1: %v", err)
+	}
+
+	user2, err := store.CreateUser(ctx, "user2@example.com", "password_hash")
+	if err != nil {
+		t.Fatalf("Failed to create user2: %v", err)
+	}
+
+	// Create webhooks for user1
+	_, err = store.CreateWebhook(ctx, user1.ID, "https://example.com/webhook1", HashSecret("secret1"))
+	if err != nil {
+		t.Fatalf("Failed to create webhook1: %v", err)
+	}
+
+	_, err = store.CreateWebhook(ctx, user1.ID, "https://example.com/webhook2", HashSecret("secret2"))
+	if err != nil {
+		t.Fatalf("Failed to create webhook2: %v", err)
+	}
+
+	// Create webhook for user2
+	_, err = store.CreateWebhook(ctx, user2.ID, "https://example.com/webhook3", HashSecret("secret3"))
+	if err != nil {
+		t.Fatalf("Failed to create webhook3: %v", err)
+	}
+
+	// List webhooks for user1
+	webhooks, err := store.ListWebhooks(ctx, user1.ID)
+	if err != nil {
+		t.Fatalf("Failed to list webhooks: %v", err)
+	}
+
+	if len(webhooks) != 2 {
+		t.Errorf("Expected 2 webhooks for user1, got %d", len(webhooks))
+	}
+
+	// Verify webhook URLs are correct for user1
+	expectedURLs := map[string]bool{
+		"https://example.com/webhook1": false,
+		"https://example.com/webhook2": false,
+	}
+
+	for _, webhook := range webhooks {
+		if webhook.UserID != user1.ID {
+			t.Errorf("Expected webhook user ID %d, got %d", user1.ID, webhook.UserID)
+		}
+		if found, exists := expectedURLs[webhook.URL]; exists {
+			if found {
+				t.Errorf("Duplicate webhook URL found: %s", webhook.URL)
+			}
+			expectedURLs[webhook.URL] = true
+		} else {
+			t.Errorf("Unexpected webhook URL: %s", webhook.URL)
+		}
+	}
+
+	// List webhooks for user2
+	webhooks, err = store.ListWebhooks(ctx, user2.ID)
+	if err != nil {
+		t.Fatalf("Failed to list webhooks for user2: %v", err)
+	}
+
+	if len(webhooks) != 1 {
+		t.Errorf("Expected 1 webhook for user2, got %d", len(webhooks))
+	}
+
+	if webhooks[0].URL != "https://example.com/webhook3" {
+		t.Errorf("Expected URL https://example.com/webhook3, got %s", webhooks[0].URL)
+	}
+}
+
+func TestSQLiteStore_UpdateWebhook(t *testing.T) {
+	store, err := NewSQLiteStore("file::memory:?cache=shared")
+	if err != nil {
+		t.Fatalf("Failed to create test store: %v", err)
+	}
+	defer store.Close()
+
+	ctx := context.Background()
+
+	// Create a test user
+	user, err := store.CreateUser(ctx, "test@example.com", "password_hash")
+	if err != nil {
+		t.Fatalf("Failed to create test user: %v", err)
+	}
+
+	// Create initial webhook
+	webhook, err := store.CreateWebhook(ctx, user.ID, "https://example.com/old", HashSecret("old-secret"))
+	if err != nil {
+		t.Fatalf("Failed to create webhook: %v", err)
+	}
+
+	// Test updating URL only
+	newURL := "https://example.com/new"
+	updatedWebhook, err := store.UpdateWebhook(ctx, webhook.ID, user.ID, newURL, nil, nil)
+	if err != nil {
+		t.Fatalf("Failed to update webhook URL: %v", err)
+	}
+
+	if updatedWebhook.URL != newURL {
+		t.Errorf("Expected URL %s, got %s", newURL, updatedWebhook.URL)
+	}
+	if updatedWebhook.SecretHash != webhook.SecretHash {
+		t.Error("Secret hash should not have changed")
+	}
+
+	// Test updating secret hash only
+	newSecretHash := HashSecret("new-secret")
+	updatedWebhook, err = store.UpdateWebhook(ctx, webhook.ID, user.ID, "", &newSecretHash, nil)
+	if err != nil {
+		t.Fatalf("Failed to update webhook secret: %v", err)
+	}
+
+	if updatedWebhook.SecretHash != newSecretHash {
+		t.Errorf("Expected secret hash %s, got %s", newSecretHash, updatedWebhook.SecretHash)
+	}
+
+	// Test updating active status
+	isActive := false
+	updatedWebhook, err = store.UpdateWebhook(ctx, webhook.ID, user.ID, "", nil, &isActive)
+	if err != nil {
+		t.Fatalf("Failed to update webhook active status: %v", err)
+	}
+
+	if updatedWebhook.IsActive != isActive {
+		t.Errorf("Expected is_active %v, got %v", isActive, updatedWebhook.IsActive)
+	}
+
+	// Test updating non-existent webhook
+	_, err = store.UpdateWebhook(ctx, 99999, user.ID, "https://example.com/notfound", nil, nil)
+	if err == nil {
+		t.Error("Expected error when updating non-existent webhook")
+	}
+}
+
+func TestSQLiteStore_DeleteWebhook(t *testing.T) {
+	store, err := NewSQLiteStore("file::memory:?cache=shared")
+	if err != nil {
+		t.Fatalf("Failed to create test store: %v", err)
+	}
+	defer store.Close()
+
+	ctx := context.Background()
+
+	// Create a test user
+	user, err := store.CreateUser(ctx, "test@example.com", "password_hash")
+	if err != nil {
+		t.Fatalf("Failed to create test user: %v", err)
+	}
+
+	// Create a webhook
+	webhook, err := store.CreateWebhook(ctx, user.ID, "https://example.com/webhook", HashSecret("secret"))
+	if err != nil {
+		t.Fatalf("Failed to create webhook: %v", err)
+	}
+
+	// Delete the webhook
+	err = store.DeleteWebhook(ctx, webhook.ID, user.ID)
+	if err != nil {
+		t.Fatalf("Failed to delete webhook: %v", err)
+	}
+
+	// Verify webhook is deleted
+	webhooks, err := store.ListWebhooks(ctx, user.ID)
+	if err != nil {
+		t.Fatalf("Failed to list webhooks: %v", err)
+	}
+
+	if len(webhooks) != 0 {
+		t.Errorf("Expected 0 webhooks after deletion, got %d", len(webhooks))
+	}
+
+	// Test deleting non-existent webhook
+	err = store.DeleteWebhook(ctx, 99999, user.ID)
+	if err == nil {
+		t.Error("Expected error when deleting non-existent webhook")
+	}
+}
+
+func TestSQLiteStore_IncrementWebhookFailure(t *testing.T) {
+	store, err := NewSQLiteStore("file::memory:?cache=shared")
+	if err != nil {
+		t.Fatalf("Failed to create test store: %v", err)
+	}
+	defer store.Close()
+
+	ctx := context.Background()
+
+	// Create a test user
+	user, err := store.CreateUser(ctx, "test@example.com", "password_hash")
+	if err != nil {
+		t.Fatalf("Failed to create test user: %v", err)
+	}
+
+	// Create a webhook
+	webhook, err := store.CreateWebhook(ctx, user.ID, "https://example.com/webhook", HashSecret("secret"))
+	if err != nil {
+		t.Fatalf("Failed to create webhook: %v", err)
+	}
+
+	// Initial failure count should be 0
+	if webhook.FailureCount != 0 {
+		t.Errorf("Expected initial failure count 0, got %d", webhook.FailureCount)
+	}
+
+	errorTime := time.Now()
+
+	// Increment failure
+	err = store.IncrementWebhookFailure(ctx, webhook.ID, errorTime)
+	if err != nil {
+		t.Fatalf("Failed to increment webhook failure: %v", err)
+	}
+
+	// Check updated webhook
+	webhooks, err := store.ListWebhooks(ctx, user.ID)
+	if err != nil {
+		t.Fatalf("Failed to list webhooks: %v", err)
+	}
+
+	if len(webhooks) != 1 {
+		t.Fatalf("Expected 1 webhook, got %d", len(webhooks))
+	}
+
+	updatedWebhook := webhooks[0]
+	if updatedWebhook.FailureCount != 1 {
+		t.Errorf("Expected failure count 1, got %d", updatedWebhook.FailureCount)
+	}
+
+	if updatedWebhook.LastErrorAt == nil {
+		t.Error("Expected last_error_at to be set")
+	}
+
+	// Increment again
+	err = store.IncrementWebhookFailure(ctx, webhook.ID, time.Now())
+	if err != nil {
+		t.Fatalf("Failed to increment webhook failure again: %v", err)
+	}
+
+	// Check updated webhook again
+	webhooks, err = store.ListWebhooks(ctx, user.ID)
+	if err != nil {
+		t.Fatalf("Failed to list webhooks: %v", err)
+	}
+
+	updatedWebhook = webhooks[0]
+	if updatedWebhook.FailureCount != 2 {
+		t.Errorf("Expected failure count 2, got %d", updatedWebhook.FailureCount)
+	}
+}
+
+func TestSQLiteStore_MarkWebhookSuccess(t *testing.T) {
+	store, err := NewSQLiteStore("file::memory:?cache=shared")
+	if err != nil {
+		t.Fatalf("Failed to create test store: %v", err)
+	}
+	defer store.Close()
+
+	ctx := context.Background()
+
+	// Create a test user
+	user, err := store.CreateUser(ctx, "test@example.com", "password_hash")
+	if err != nil {
+		t.Fatalf("Failed to create test user: %v", err)
+	}
+
+	// Create a webhook
+	webhook, err := store.CreateWebhook(ctx, user.ID, "https://example.com/webhook", HashSecret("secret"))
+	if err != nil {
+		t.Fatalf("Failed to create webhook: %v", err)
+	}
+
+	// Increment failure first
+	err = store.IncrementWebhookFailure(ctx, webhook.ID, time.Now())
+	if err != nil {
+		t.Fatalf("Failed to increment webhook failure: %v", err)
+	}
+
+	successTime := time.Now()
+
+	// Mark success
+	err = store.MarkWebhookSuccess(ctx, webhook.ID, successTime)
+	if err != nil {
+		t.Fatalf("Failed to mark webhook success: %v", err)
+	}
+
+	// Check updated webhook
+	webhooks, err := store.ListWebhooks(ctx, user.ID)
+	if err != nil {
+		t.Fatalf("Failed to list webhooks: %v", err)
+	}
+
+	if len(webhooks) != 1 {
+		t.Fatalf("Expected 1 webhook, got %d", len(webhooks))
+	}
+
+	updatedWebhook := webhooks[0]
+	if updatedWebhook.FailureCount != 0 {
+		t.Errorf("Expected failure count to be reset to 0, got %d", updatedWebhook.FailureCount)
+	}
+
+	if updatedWebhook.LastSuccessAt == nil {
+		t.Error("Expected last_success_at to be set")
+	}
+}
+
+func TestSQLiteStore_WebhookCascadeDelete(t *testing.T) {
+	store, err := NewSQLiteStore("file::memory:?cache=shared")
+	if err != nil {
+		t.Fatalf("Failed to create test store: %v", err)
+	}
+	defer store.Close()
+
+	ctx := context.Background()
+
+	// Create a test user
+	user, err := store.CreateUser(ctx, "test@example.com", "password_hash")
+	if err != nil {
+		t.Fatalf("Failed to create test user: %v", err)
+	}
+
+	// Create a webhook
+	_, err = store.CreateWebhook(ctx, user.ID, "https://example.com/webhook", HashSecret("secret"))
+	if err != nil {
+		t.Fatalf("Failed to create webhook: %v", err)
+	}
+
+	// Verify webhook exists
+	webhooks, err := store.ListWebhooks(ctx, user.ID)
+	if err != nil {
+		t.Fatalf("Failed to list webhooks: %v", err)
+	}
+	if len(webhooks) != 1 {
+		t.Errorf("Expected 1 webhook before user deletion, got %d", len(webhooks))
+	}
+
+	// Delete the user
+	err = store.DeleteUser(ctx, user.ID)
+	if err != nil {
+		t.Fatalf("Failed to delete user: %v", err)
+	}
+
+	// Verify webhooks were cascade deleted
+	webhooks, err = store.ListWebhooks(ctx, user.ID)
+	if err != nil {
+		t.Fatalf("Failed to list webhooks after user deletion: %v", err)
+	}
+	if len(webhooks) != 0 {
+		t.Errorf("Expected 0 webhooks after user deletion, got %d", len(webhooks))
+	}
+}
+
+func TestHashSecret(t *testing.T) {
+	secret := "my-secret-key"
+	hash1 := HashSecret(secret)
+	hash2 := HashSecret(secret)
+
+	// Hash should be deterministic
+	if hash1 != hash2 {
+		t.Error("Hash should be deterministic for the same input")
+	}
+
+	// Hash should be 64 characters (SHA-256 hex)
+	if len(hash1) != 64 {
+		t.Errorf("Expected hash length 64, got %d", len(hash1))
+	}
+
+	// Different secrets should produce different hashes
+	differentHash := HashSecret("different-secret")
+	if hash1 == differentHash {
+		t.Error("Different secrets should produce different hashes")
+	}
+}

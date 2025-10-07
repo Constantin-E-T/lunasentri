@@ -74,6 +74,14 @@ type Store interface {
     CreateAlertEvent(ctx context.Context, ruleID int, value float64) (*AlertEvent, error)
     AckAlertEvent(ctx context.Context, id int) error
 
+    // Webhook methods
+    ListWebhooks(ctx context.Context, userID int) ([]Webhook, error)
+    CreateWebhook(ctx context.Context, userID int, url, secretHash string) (*Webhook, error)
+    UpdateWebhook(ctx context.Context, id int, userID int, url string, secretHash *string, isActive *bool) (*Webhook, error)
+    DeleteWebhook(ctx context.Context, id int, userID int) error
+    IncrementWebhookFailure(ctx context.Context, id int, lastErrorAt time.Time) error
+    MarkWebhookSuccess(ctx context.Context, id int, lastSuccessAt time.Time) error
+
 	// Close closes the storage connection
 	Close() error
 }
@@ -108,4 +116,18 @@ type AlertEvent struct {
     Value          float64    `json:"value"`
     Acknowledged   bool       `json:"acknowledged"`
     AcknowledgedAt *time.Time `json:"acknowledged_at,omitempty"`
+}
+
+// Webhook represents a user webhook configuration for alert notifications
+type Webhook struct {
+    ID            int        `json:"id"`
+    UserID        int        `json:"user_id"`
+    URL           string     `json:"url"`
+    SecretHash    string     `json:"secret_hash"`    // SHA-256 hex hash of user-provided secret
+    IsActive      bool       `json:"is_active"`
+    FailureCount  int        `json:"failure_count"`
+    LastSuccessAt *time.Time `json:"last_success_at"`
+    LastErrorAt   *time.Time `json:"last_error_at"`
+    CreatedAt     time.Time  `json:"created_at"`
+    UpdatedAt     time.Time  `json:"updated_at"`
 }

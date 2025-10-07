@@ -16,6 +16,7 @@ import (
 	"github.com/Constantin-E-T/lunasentri/apps/api-go/internal/alerts"
 	"github.com/Constantin-E-T/lunasentri/apps/api-go/internal/auth"
 	"github.com/Constantin-E-T/lunasentri/apps/api-go/internal/metrics"
+	"github.com/Constantin-E-T/lunasentri/apps/api-go/internal/notifications"
 	"github.com/Constantin-E-T/lunasentri/apps/api-go/internal/storage"
 	"github.com/Constantin-E-T/lunasentri/apps/api-go/internal/system"
 	"github.com/gorilla/websocket"
@@ -1046,8 +1047,11 @@ func main() {
 	// Initialize system service
 	systemService := system.NewSystemService()
 
-	// Initialize alert service
-	alertService := alerts.NewService(store)
+	// Initialize webhook notifier
+	webhookNotifier := notifications.NewNotifier(store, log.Default())
+
+	// Initialize alert service with notifier
+	alertService := alerts.NewService(store, webhookNotifier)
 
 	// Create server with real collector, auth service, alert service, and system service
 	mux := newServer(metricsCollector, serverStartTime, authService, alertService, systemService, accessTTL, passwordResetTTL, secureCookie)
