@@ -3,6 +3,7 @@
 import { useEffect, useRef } from 'react';
 import { useAlerts } from './useAlerts';
 import { useToast } from '@/components/ui/use-toast';
+import { useSession } from './useSession';
 import type { AlertEvent } from './api';
 
 export interface UseAlertsWithNotificationsReturn extends ReturnType<typeof useAlerts> {
@@ -24,10 +25,13 @@ export interface UseAlertsWithNotificationsReturn extends ReturnType<typeof useA
 export function useAlertsWithNotifications(eventsLimit?: number): UseAlertsWithNotificationsReturn {
     const alertsHook = useAlerts(eventsLimit);
     const { toast } = useToast();
+    const { status } = useSession();
 
     // Track the last seen event ID in localStorage
     const lastSeenEventIdRef = useRef<number | null>(null);
     const isInitialLoadRef = useRef(true);
+    const isRefreshInFlightRef = useRef(false);
+    const pollingIntervalRef = useRef<NodeJS.Timeout | null>(null);
 
     // Initialize last seen event ID from localStorage
     useEffect(() => {
@@ -41,6 +45,44 @@ export function useAlertsWithNotifications(eventsLimit?: number): UseAlertsWithN
             console.warn('localStorage not available for alert notifications');
         }
     }, []);
+
+    // Set up polling for live updates when authenticated
+    useEffect(() => {
+        if (status !== 'authenticated') {
+            // Clear polling if not authenticated
+            if (pollingIntervalRef.current) {
+                clearInterval(pollingIntervalRef.current);
+                pollingIntervalRef.current = null;
+            }
+            return;
+        }
+
+        // Start polling every 10 seconds
+        pollingIntervalRef.current = setInterval(async () => {
+            // Skip if a refresh is already in progress
+            if (isRefreshInFlightRef.current) {
+                return;
+            }
+
+            try {
+                isRefreshInFlightRef.current = true;
+                await alertsHook.refresh();
+            } catch (error) {
+                console.error('Failed to refresh alerts during polling:', error);
+            } finally {
+                isRefreshInFlightRef.current = false;
+            }
+        }, 10000); // 10 second interval
+
+        // Cleanup on unmount or auth status change
+        return () => {
+            if (pollingIntervalRef.current) {
+                clearInterval(pollingIntervalRef.current);
+                pollingIntervalRef.current = null;
+            }
+            isRefreshInFlightRef.current = false;
+        };
+    }, [status, alertsHook.refresh]);
 
     // Track new events and show notifications
     useEffect(() => {

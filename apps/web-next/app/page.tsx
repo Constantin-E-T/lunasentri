@@ -13,9 +13,9 @@ import { Badge } from "@/components/ui/badge";
 export default function Home() {
   const router = useRouter();
   const { status, user, logout } = useSession();
-  const { events, newAlertsCount } = useAlertsWithNotifications(10); // Fetch limited events for badge count
+  const { events, rules, newAlertsCount } = useAlertsWithNotifications(10); // Fetch limited events for badge count
 
-  // Count unacknowledged events
+  // Count unacknowledged events from live data
   const unacknowledgedCount =
     events?.filter((e) => !e.acknowledged).length || 0;
 
@@ -132,7 +132,7 @@ export default function Home() {
               {/* Right Column */}
               <div className="space-y-6">
                 <SystemInfoCard />
-                <ActiveAlertsCard />
+                <ActiveAlertsCard events={events} rules={rules} />
               </div>
             </div>
           </div>
