@@ -72,7 +72,7 @@ export function MetricsCard() {
 
   if (loading) {
     return (
-      <div className="max-w-xl mx-auto rounded-2xl bg-card/70 border border-border/30 backdrop-blur-xl shadow-xl p-8">
+      <div className="w-full rounded-2xl bg-card/70 border border-border/30 backdrop-blur-xl shadow-xl p-8 min-h-[400px]">
         <div className="flex items-center justify-center text-muted-foreground animate-pulse">
           Loading metrics...
         </div>
@@ -82,7 +82,7 @@ export function MetricsCard() {
 
   if (error) {
     return (
-      <div className="max-w-xl mx-auto rounded-2xl bg-destructive/10 border border-destructive/30 backdrop-blur-xl shadow-xl p-8">
+      <div className="w-full rounded-2xl bg-destructive/10 border border-destructive/30 backdrop-blur-xl shadow-xl p-8 min-h-[400px]">
         <div className="text-center space-y-4">
           <p className="text-destructive text-sm tracking-wide">
             ⚠️ Connection Error
@@ -104,7 +104,7 @@ export function MetricsCard() {
   }
 
   return (
-    <div className="max-w-xl mx-auto rounded-2xl bg-card/70 border border-border/30 backdrop-blur-xl shadow-2xl p-8 transition-all duration-300 hover:-translate-y-1 hover:shadow-[0_20px_60px_rgba(20,40,120,0.35)]">
+    <div className="w-full rounded-2xl bg-card/70 border border-border/30 backdrop-blur-xl shadow-2xl p-8 min-h-[400px] transition-all duration-300 hover:-translate-y-1 hover:shadow-[0_20px_60px_rgba(20,40,120,0.35)]">
       <div className="flex justify-between items-center mb-6">
         <div className="text-left">
           <p className="text-xs uppercase tracking-[0.25em] text-muted-foreground">

@@ -1,8 +1,15 @@
-'use client';
+"use client";
 
-import { useSystemInfo } from '@/lib/useSystemInfo';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Server, Cpu, HardDrive, Clock, Monitor, CircuitBoard } from 'lucide-react';
+import { useSystemInfo } from "@/lib/useSystemInfo";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  Server,
+  Cpu,
+  HardDrive,
+  Clock,
+  Monitor,
+  CircuitBoard,
+} from "lucide-react";
 
 function formatUptime(seconds: number): string {
   const days = Math.floor(seconds / (24 * 3600));
@@ -18,8 +25,8 @@ function formatUptime(seconds: number): string {
   }
 }
 
-function formatBytes(bytes: number, unit: 'MB' | 'GB'): string {
-  if (unit === 'GB') {
+function formatBytes(bytes: number, unit: "MB" | "GB"): string {
+  if (unit === "GB") {
     return `${bytes} GB`;
   }
   // Convert MB to GB if > 1024 MB
@@ -39,7 +46,7 @@ export function SystemInfoCard() {
 
   if (loading) {
     return (
-      <Card className="bg-card/70 border border-border/30 backdrop-blur-xl">
+      <Card className="w-full bg-card/70 border border-border/30 backdrop-blur-xl shadow-2xl">
         <CardHeader>
           <CardTitle className="flex items-center gap-2 text-foreground">
             <Server className="h-5 w-5" />
@@ -59,7 +66,7 @@ export function SystemInfoCard() {
 
   if (error) {
     return (
-      <Card className="bg-card/70 border border-border/30 backdrop-blur-xl">
+      <Card className="w-full bg-card/70 border border-border/30 backdrop-blur-xl shadow-2xl">
         <CardHeader>
           <CardTitle className="flex items-center gap-2 text-foreground">
             <Server className="h-5 w-5" />
@@ -67,9 +74,7 @@ export function SystemInfoCard() {
           </CardTitle>
         </CardHeader>
         <CardContent>
-          <div className="text-destructive text-sm">
-            {error}
-          </div>
+          <div className="text-destructive text-sm">{error}</div>
         </CardContent>
       </Card>
     );
@@ -80,31 +85,39 @@ export function SystemInfoCard() {
   }
 
   return (
-    <Card className="bg-card/70 border border-border/30 backdrop-blur-xl">
-      <CardHeader>
+    <Card className="w-full bg-card/70 border border-border/30 backdrop-blur-xl shadow-2xl transition-all duration-300 hover:-translate-y-1 hover:shadow-[0_20px_60px_rgba(20,40,120,0.35)]">
+      <CardHeader className="pb-4">
         <CardTitle className="flex items-center gap-2 text-foreground">
           <Server className="h-5 w-5" />
           System Information
         </CardTitle>
       </CardHeader>
       <CardContent className="space-y-4">
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          {/* Hostname & Platform */}
-          <div className="space-y-3">
-            <div className="flex items-center gap-2">
-              <Monitor className="h-4 w-4 text-primary" />
+        <div className="space-y-3">
+          {/* Hostname */}
+          <div className="flex items-start gap-2">
+            <Monitor className="h-4 w-4 text-primary mt-0.5 shrink-0" />
+            <div className="flex flex-col sm:flex-row sm:items-center gap-1">
               <span className="text-sm text-muted-foreground">Hostname:</span>
               <span className="text-sm font-medium">{systemInfo.hostname}</span>
             </div>
-            <div className="flex items-center gap-2">
-              <CircuitBoard className="h-4 w-4 text-primary" />
+          </div>
+
+          {/* Platform */}
+          <div className="flex items-start gap-2">
+            <CircuitBoard className="h-4 w-4 text-primary mt-0.5 shrink-0" />
+            <div className="flex flex-col sm:flex-row sm:items-center gap-1">
               <span className="text-sm text-muted-foreground">Platform:</span>
               <span className="text-sm font-medium">
                 {systemInfo.platform} {systemInfo.platform_version}
               </span>
             </div>
-            <div className="flex items-center gap-2">
-              <Clock className="h-4 w-4 text-primary" />
+          </div>
+
+          {/* Uptime */}
+          <div className="flex items-start gap-2">
+            <Clock className="h-4 w-4 text-primary mt-0.5 shrink-0" />
+            <div className="flex flex-col sm:flex-row sm:items-center gap-1">
               <span className="text-sm text-muted-foreground">Uptime:</span>
               <span className="text-sm font-medium">
                 {formatUptime(systemInfo.uptime_s)}
@@ -112,38 +125,50 @@ export function SystemInfoCard() {
             </div>
           </div>
 
-          {/* Hardware Info */}
-          <div className="space-y-3">
-            <div className="flex items-center gap-2">
-              <Cpu className="h-4 w-4 text-primary" />
+          {/* CPU Cores */}
+          <div className="flex items-start gap-2">
+            <Cpu className="h-4 w-4 text-primary mt-0.5 shrink-0" />
+            <div className="flex flex-col sm:flex-row sm:items-center gap-1">
               <span className="text-sm text-muted-foreground">CPU Cores:</span>
-              <span className="text-sm font-medium">{systemInfo.cpu_cores}</span>
-            </div>
-            <div className="flex items-center gap-2">
-              <Server className="h-4 w-4 text-primary" />
-              <span className="text-sm text-muted-foreground">Memory:</span>
               <span className="text-sm font-medium">
-                {formatBytes(systemInfo.memory_total_mb, 'MB')}
+                {systemInfo.cpu_cores}
               </span>
             </div>
-            <div className="flex items-center gap-2">
-              <HardDrive className="h-4 w-4 text-primary" />
+          </div>
+
+          {/* Memory */}
+          <div className="flex items-start gap-2">
+            <Server className="h-4 w-4 text-primary mt-0.5 shrink-0" />
+            <div className="flex flex-col sm:flex-row sm:items-center gap-1">
+              <span className="text-sm text-muted-foreground">Memory:</span>
+              <span className="text-sm font-medium">
+                {formatBytes(systemInfo.memory_total_mb, "MB")}
+              </span>
+            </div>
+          </div>
+
+          {/* Disk */}
+          <div className="flex items-start gap-2">
+            <HardDrive className="h-4 w-4 text-primary mt-0.5 shrink-0" />
+            <div className="flex flex-col sm:flex-row sm:items-center gap-1">
               <span className="text-sm text-muted-foreground">Disk:</span>
               <span className="text-sm font-medium">
-                {formatBytes(systemInfo.disk_total_gb, 'GB')}
+                {formatBytes(systemInfo.disk_total_gb, "GB")}
               </span>
             </div>
           </div>
         </div>
 
         {/* Last Boot Time */}
-        <div className="pt-2 border-t border-border/30">
-          <div className="flex items-center gap-2">
-            <Clock className="h-4 w-4 text-primary" />
-            <span className="text-sm text-muted-foreground">Last Boot:</span>
-            <span className="text-sm font-medium">
-              {formatTimestamp(systemInfo.last_boot_time)}
-            </span>
+        <div className="pt-3 border-t border-border/30">
+          <div className="flex items-start gap-2">
+            <Clock className="h-4 w-4 text-primary mt-0.5 shrink-0" />
+            <div className="flex flex-col sm:flex-row sm:items-center gap-1">
+              <span className="text-sm text-muted-foreground">Last Boot:</span>
+              <span className="text-sm font-medium">
+                {formatTimestamp(systemInfo.last_boot_time)}
+              </span>
+            </div>
           </div>
         </div>
       </CardContent>

@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { MetricsCard } from "@/components/MetricsCard";
 import { SystemInfoCard } from "@/components/SystemInfoCard";
+import { ActiveAlertsCard } from "@/components/ActiveAlertsCard";
 import { useSession } from "@/lib/useSession";
 import { useAlertsWithNotifications } from "@/lib/useAlertsWithNotifications";
 import { Badge } from "@/components/ui/badge";
@@ -107,20 +108,33 @@ export default function Home() {
         </div>
       </div>
 
-      <div className="flex items-center justify-center min-h-[calc(100vh-82px)] px-4">
-        <div className="text-center space-y-6 max-w-4xl w-full">
-          <div className="space-y-2">
-            <h1 className="text-4xl sm:text-5xl font-semibold tracking-wide text-primary drop-shadow-xl">
-              Lunar System Pulse
-            </h1>
-            <p className="text-muted-foreground text-base sm:text-lg">
-              Real-time insight into your infrastructure health with a moonlit
-              touch.
-            </p>
-          </div>
-          <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-1">
-            <MetricsCard />
-            <SystemInfoCard />
+      <div className="min-h-[calc(100vh-82px)] px-4 py-8">
+        <div className="max-w-6xl mx-auto">
+          <div className="space-y-8">
+            {/* Hero Header */}
+            <div className="space-y-2">
+              <h1 className="text-4xl sm:text-5xl font-semibold tracking-wide text-primary drop-shadow-xl">
+                Lunar System Pulse
+              </h1>
+              <p className="text-muted-foreground text-base sm:text-lg">
+                Real-time insight into your infrastructure health with a moonlit
+                touch.
+              </p>
+            </div>
+
+            {/* Responsive Grid Layout */}
+            <div className="grid gap-6 lg:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]">
+              {/* Left Column */}
+              <div className="space-y-6">
+                <MetricsCard />
+              </div>
+
+              {/* Right Column */}
+              <div className="space-y-6">
+                <SystemInfoCard />
+                <ActiveAlertsCard />
+              </div>
+            </div>
           </div>
         </div>
       </div>

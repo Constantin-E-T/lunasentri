@@ -31,6 +31,7 @@ generate_secret() {
 }
 
 AUTH_JWT_SECRET_VALUE="${AUTH_JWT_SECRET:-$(generate_secret)}"
+export CORS_ALLOWED_ORIGIN="http://localhost:$FRONTEND_PORT"
 
 export NEXT_PUBLIC_API_URL="$API_URL"
 
