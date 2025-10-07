@@ -11,7 +11,7 @@ import {
   Server,
 } from "lucide-react";
 import { useAlertsWithNotifications } from "@/lib/alerts";
-import type { AlertEvent, AlertRule } from "@/lib/alerts";
+import type { AlertEvent, AlertRule } from "@/lib/api";
 
 interface ActiveAlertsCardProps {
   events?: AlertEvent[];
