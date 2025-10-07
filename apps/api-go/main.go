@@ -38,6 +38,22 @@ var (
 	}
 )
 
+// evaluateAlerts is a helper function to evaluate alerts with a dedicated background context
+// This prevents context cancellation issues when request/websocket contexts are cancelled
+func evaluateAlerts(alertService *alerts.Service, metricsData metrics.Metrics) {
+	if alertService == nil {
+		return
+	}
+	
+	// Use a short-lived background context to avoid cancellation issues
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+	
+	if err := alertService.Evaluate(ctx, metricsData); err != nil {
+		log.Printf("Failed to evaluate alerts: %v", err)
+	}
+}
+
 // LoginRequest represents the login request body
 type LoginRequest struct {
 	Email    string `json:"email"`
@@ -570,13 +586,8 @@ func handleWebSocket(collector metrics.Collector, startTime time.Time, alertServ
 				// Set real uptime
 				metricsData.UptimeS = time.Since(startTime).Seconds()
 
-				// Evaluate alerts with the new metrics
-				if alertService != nil {
-					if err := alertService.Evaluate(ctx, metricsData); err != nil {
-						// Log error but don't fail the websocket
-						log.Printf("Failed to evaluate alerts in websocket: %v", err)
-					}
-				}
+				// Evaluate alerts with the new metrics using background context
+				evaluateAlerts(alertService, metricsData)
 
 				// Set write deadline for this message
 				conn.SetWriteDeadline(time.Now().Add(10 * time.Second))
@@ -689,13 +700,8 @@ func newServer(collector metrics.Collector, startTime time.Time, authService *au
 		// Set real uptime
 		metricsData.UptimeS = time.Since(startTime).Seconds()
 
-		// Evaluate alerts with the new metrics
-		if alertService != nil {
-			if err := alertService.Evaluate(ctx, metricsData); err != nil {
-				// Log error but don't fail the metrics request
-				log.Printf("Failed to evaluate alerts: %v", err)
-			}
-		}
+		// Evaluate alerts with the new metrics using background context
+		evaluateAlerts(alertService, metricsData)
 
 		if err := json.NewEncoder(w).Encode(metricsData); err != nil {
 			http.Error(w, "Internal Server Error", http.StatusInternalServerError)
