@@ -8,7 +8,7 @@ import type { MetricSample } from "@/lib/useMetrics";
 
 interface MetricSparklineProps {
   data: MetricSample[];
-  metric: 'cpu_pct' | 'mem_used_pct';
+  metric: "cpu_pct" | "mem_used_pct";
   className?: string;
 }
 
@@ -18,12 +18,16 @@ const chartConfig = {
     color: "hsl(var(--chart-1))",
   },
   mem_used_pct: {
-    label: "Memory", 
+    label: "Memory",
     color: "hsl(var(--chart-2))",
   },
 } satisfies ChartConfig;
 
-export function MetricSparkline({ data, metric, className }: MetricSparklineProps) {
+export function MetricSparkline({
+  data,
+  metric,
+  className,
+}: MetricSparklineProps) {
   const chartRef = useRef<HTMLDivElement>(null);
   const [axis, setAxis] = useState(0);
 
@@ -90,7 +94,8 @@ export function MetricSparkline({ data, metric, className }: MetricSparklineProp
             }
           }}
           onMouseLeave={() => {
-            const chartWidth = chartRef.current?.getBoundingClientRect().width || 0;
+            const chartWidth =
+              chartRef.current?.getBoundingClientRect().width || 0;
             springX.set(chartWidth);
             springY.jump(currentValue);
           }}
@@ -107,12 +112,8 @@ export function MetricSparkline({ data, metric, className }: MetricSparklineProp
             strokeDasharray="3 3"
             strokeOpacity={0.1}
           />
-          <XAxis
-            dataKey="index"
-            hide
-            domain={['dataMin', 'dataMax']}
-          />
-          
+          <XAxis dataKey="index" hide domain={["dataMin", "dataMax"]} />
+
           {/* Main filled area with clipping effect */}
           <Area
             dataKey="value"
@@ -127,7 +128,7 @@ export function MetricSparkline({ data, metric, className }: MetricSparklineProp
             dot={false}
             activeDot={false}
           />
-          
+
           {/* Animated vertical tracking line */}
           <line
             x1={axis}
@@ -139,7 +140,7 @@ export function MetricSparkline({ data, metric, className }: MetricSparklineProp
             strokeOpacity={0.4}
             strokeWidth={1}
           />
-          
+
           {/* Ghost line behind the filled area */}
           <Area
             dataKey="value"
@@ -151,7 +152,7 @@ export function MetricSparkline({ data, metric, className }: MetricSparklineProp
             dot={false}
             activeDot={false}
           />
-          
+
           <defs>
             <linearGradient
               id={`gradient-${metric}`}
@@ -160,16 +161,8 @@ export function MetricSparkline({ data, metric, className }: MetricSparklineProp
               x2="0"
               y2="1"
             >
-              <stop
-                offset="5%"
-                stopColor={metricColor}
-                stopOpacity={0.4}
-              />
-              <stop
-                offset="95%"
-                stopColor={metricColor}
-                stopOpacity={0}
-              />
+              <stop offset="5%" stopColor={metricColor} stopOpacity={0.4} />
+              <stop offset="95%" stopColor={metricColor} stopOpacity={0} />
             </linearGradient>
           </defs>
         </AreaChart>

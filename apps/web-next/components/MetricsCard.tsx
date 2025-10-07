@@ -60,8 +60,15 @@ function ConnectionStatus({
 }
 
 export function MetricsCard() {
-  const { metrics, error, loading, connectionType, lastUpdate, retry, history } =
-    useMetrics();
+  const {
+    metrics,
+    error,
+    loading,
+    connectionType,
+    lastUpdate,
+    retry,
+    history,
+  } = useMetrics();
 
   if (loading) {
     return (
@@ -77,7 +84,9 @@ export function MetricsCard() {
     return (
       <div className="max-w-xl mx-auto rounded-2xl bg-destructive/10 border border-destructive/30 backdrop-blur-xl shadow-xl p-8">
         <div className="text-center space-y-4">
-          <p className="text-destructive text-sm tracking-wide">⚠️ Connection Error</p>
+          <p className="text-destructive text-sm tracking-wide">
+            ⚠️ Connection Error
+          </p>
           <p className="text-muted-foreground text-xs">{error}</p>
           <button
             onClick={retry}
@@ -98,8 +107,12 @@ export function MetricsCard() {
     <div className="max-w-xl mx-auto rounded-2xl bg-card/70 border border-border/30 backdrop-blur-xl shadow-2xl p-8 transition-all duration-300 hover:-translate-y-1 hover:shadow-[0_20px_60px_rgba(20,40,120,0.35)]">
       <div className="flex justify-between items-center mb-6">
         <div className="text-left">
-          <p className="text-xs uppercase tracking-[0.25em] text-muted-foreground">Orbital Feed</p>
-          <h2 className="text-2xl font-semibold text-foreground">Live Metrics</h2>
+          <p className="text-xs uppercase tracking-[0.25em] text-muted-foreground">
+            Orbital Feed
+          </p>
+          <h2 className="text-2xl font-semibold text-foreground">
+            Live Metrics
+          </h2>
         </div>
         {connectionType === "websocket" && (
           <div
@@ -113,20 +126,26 @@ export function MetricsCard() {
         {history.length > 0 && (
           <div className="space-y-2">
             <div className="flex justify-between items-center">
-              <span className="text-muted-foreground text-xs uppercase tracking-wide">CPU Trend</span>
+              <span className="text-muted-foreground text-xs uppercase tracking-wide">
+                CPU Trend
+              </span>
               <span className="text-foreground text-xs">Last 60 samples</span>
             </div>
-            <MetricSparkline data={history} metric="cpu_pct" className="rounded-lg" />
+            <MetricSparkline
+              data={history}
+              metric="cpu_pct"
+              className="rounded-lg"
+            />
           </div>
         )}
-        
+
         {/* Current Metrics */}
         <div className="space-y-5">
           <MetricRow label="CPU" value={metrics.cpu_pct} />
           <MetricRow label="Memory" value={metrics.mem_used_pct} />
           <MetricRow label="Disk" value={metrics.disk_used_pct} />
         </div>
-        
+
         <div className="pt-4 border-t border-border/40">
           <div className="flex justify-between items-center">
             <span className="text-muted-foreground text-sm">Uptime</span>
@@ -158,12 +177,18 @@ function MetricRow({ label, value }: MetricRowProps) {
   return (
     <div>
       <div className="flex justify-between items-center mb-2">
-        <span className="text-muted-foreground text-sm tracking-wide uppercase">{label}</span>
-        <span className="text-foreground font-semibold">{value.toFixed(1)}%</span>
+        <span className="text-muted-foreground text-sm tracking-wide uppercase">
+          {label}
+        </span>
+        <span className="text-foreground font-semibold">
+          {value.toFixed(1)}%
+        </span>
       </div>
       <div className="w-full bg-border/40 rounded-full h-2 overflow-hidden">
         <div
-          className={`h-full ${getColor(value)} transition-all duration-500 ease-out`}
+          className={`h-full ${getColor(
+            value
+          )} transition-all duration-500 ease-out`}
           style={{ width: `${Math.min(value, 100)}%` }}
         />
       </div>

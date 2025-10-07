@@ -24,10 +24,10 @@
     "tailwind-merge": "^3.3.1"
   },
   "devDependencies": {
-    "@tailwindcss/postcss": "^4.1.14",
+    "@tailwindcss/postcss": "4.1.14",
     "@testing-library/jest-dom": "^6.1.5",
-    "@testing-library/react": "^14.1.2",
-    "@testing-library/user-event": "^14.5.1",
+    "@testing-library/react": "14.3.1",
+    "@testing-library/user-event": "14.6.1",
     "@types/jest": "^29.5.8",
     "@types/node": "^20",
     "@types/react": "^19",

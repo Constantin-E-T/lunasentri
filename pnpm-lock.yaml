@@ -45,16 +45,16 @@ importers:
         version: 3.3.1
     devDependencies:
       '@tailwindcss/postcss':
-        specifier: ^4.1.14
+        specifier: 4.1.14
         version: 4.1.14
       '@testing-library/jest-dom':
         specifier: ^6.1.5
         version: 6.9.1
       '@testing-library/react':
-        specifier: ^14.1.2
+        specifier: 14.3.1
         version: 14.3.1(@types/react@19.2.0)(react-dom@19.1.0(react@19.1.0))(react@19.1.0)
       '@testing-library/user-event':
-        specifier: ^14.5.1
+        specifier: 14.6.1
         version: 14.6.1(@testing-library/dom@9.3.4)
       '@types/jest':
         specifier: ^29.5.8
