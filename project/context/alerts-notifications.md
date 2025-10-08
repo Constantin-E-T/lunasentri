@@ -202,17 +202,34 @@ The webhook management UI has been fully implemented in the Settings page:
 - ✅ Toast notifications for all operations (success/error feedback)
 - ✅ Proper error handling with inline validation
 - ✅ Glassmorphism design matching LunaSentri aesthetic
+- ✅ **Rate limiting UI**: Display cooldown status and disable "Send Test" when in cooldown or rate limited
+- ✅ **Cooldown visibility**: Show countdown timer and cooldown until timestamp
+- ✅ **Enhanced status indicators**: Amber for 1-2 failures, red for ≥3 failures
+- ✅ **Last attempt tracking**: Display relative time since last webhook delivery attempt
 
 **User Experience:**
 
-- Status pills show webhook health (emerald for active, amber for failures, red for high failures)
+- Status pills show webhook health with cooldown state:
+  - "Cooling Down" badge with red border when circuit breaker is active
+  - Emerald for active webhooks
+  - Amber for 1-2 failures
+  - Red for high failures (≥3)
+- Cooldown banner displays when circuit breaker is active with countdown
+- "Send Test" button disabled with tooltip when:
+  - Webhook is in cooldown (shows cooldown end time)
+  - Rate limit active (shows retry countdown in seconds)
 - Secret masking displays last 4 characters only (e.g., `••••2345`)
-- Relative timestamps for last success/error (e.g., "2h ago", "5m ago")
+- Relative timestamps for last success/error/attempt (e.g., "2h ago", "5m ago")
 - Form validation prevents HTTP URLs and enforces secret length requirements
 - Empty state provides helpful onboarding information
 
 **Testing:**
 
-- ✅ Unit tests for `useWebhooks` hook covering success, error, and auth expiry cases
-- ✅ All existing tests continue to pass
+- ✅ Unit tests for `useWebhooks` hook covering:
+  - Success cases with cooldown field parsing
+  - 429 rate limit response handling
+  - Cooldown state derivation (`isCoolingDown`, `canSendTest`, `retryAfterSeconds`)
+  - Refresh after test webhook to update cooldown state
+  - Error and auth expiry cases
+- ✅ All existing tests continue to pass (22 tests total)
 - ✅ Build verification successful with Turbopack

@@ -15,6 +15,16 @@ export interface Webhook {
     secret_last_four: string;
     created_at: string;
     updated_at: string;
+    cooldown_until: string | null;
+    last_attempt_at: string | null;
+}
+
+// Helper interface for computed webhook state
+export interface WebhookWithState extends Webhook {
+    isCoolingDown: boolean;
+    cooldownUntil: Date | null;
+    retryAfterSeconds: number | null;
+    canSendTest: boolean;
 }
 
 export interface CreateWebhookRequest {
@@ -51,6 +61,19 @@ async function webhookRequest<T>(
             window.dispatchEvent(new CustomEvent('session-expired'));
         }
         throw new Error('Session expired');
+    }
+
+    // Handle rate limiting with detailed message
+    if (response.status === 429) {
+        try {
+            const errorData = await response.json();
+            throw new Error(errorData.error || 'Rate limit exceeded');
+        } catch (err) {
+            if (err instanceof Error && err.message !== 'Rate limit exceeded') {
+                throw new Error('Rate limit exceeded');
+            }
+            throw err;
+        }
     }
 
     if (!response.ok) {
@@ -112,7 +135,7 @@ export async function sendTestWebhook(id: number): Promise<void> {
 
 // Custom hook for managing webhooks
 export interface UseWebhooksReturn {
-    webhooks: Webhook[];
+    webhooks: WebhookWithState[];
     loading: boolean;
     error: string | null;
     createWebhook: (payload: CreateWebhookRequest) => Promise<void>;
@@ -122,8 +145,39 @@ export interface UseWebhooksReturn {
     refresh: () => Promise<void>;
 }
 
+/**
+ * Computes derived state for a webhook
+ */
+function enrichWebhookWithState(webhook: Webhook): WebhookWithState {
+    const now = Date.now();
+    const cooldownUntil = webhook.cooldown_until ? new Date(webhook.cooldown_until) : null;
+    const lastAttemptAt = webhook.last_attempt_at ? new Date(webhook.last_attempt_at) : null;
+
+    const isCoolingDown = cooldownUntil !== null && cooldownUntil.getTime() > now;
+
+    // Calculate retry delay based on 30-second rate limit
+    let retryAfterSeconds: number | null = null;
+    if (lastAttemptAt) {
+        const secondsSinceLastAttempt = Math.floor((now - lastAttemptAt.getTime()) / 1000);
+        if (secondsSinceLastAttempt < 30) {
+            retryAfterSeconds = 30 - secondsSinceLastAttempt;
+        }
+    }
+
+    // Can send test if not cooling down and rate limit has passed
+    const canSendTest = !isCoolingDown && retryAfterSeconds === null;
+
+    return {
+        ...webhook,
+        isCoolingDown,
+        cooldownUntil,
+        retryAfterSeconds,
+        canSendTest,
+    };
+}
+
 export function useWebhooks(): UseWebhooksReturn {
-    const [webhooks, setWebhooks] = useState<Webhook[]>([]);
+    const [webhooks, setWebhooks] = useState<WebhookWithState[]>([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
 
@@ -133,7 +187,7 @@ export function useWebhooks(): UseWebhooksReturn {
             setLoading(true);
             setError(null);
             const data = await listWebhooks();
-            setWebhooks(data);
+            setWebhooks(data.map(enrichWebhookWithState));
         } catch (err) {
             const message = err instanceof Error ? err.message : 'Failed to fetch webhooks';
             setError(message);
@@ -192,12 +246,16 @@ export function useWebhooks(): UseWebhooksReturn {
     const sendTest = useCallback(async (id: number) => {
         try {
             await sendTestWebhook(id);
+            // Refresh to get updated last_attempt_at and any cooldown changes
+            await refresh();
         } catch (err) {
             const message = err instanceof Error ? err.message : 'Failed to send test webhook';
             setError(message);
+            // Refresh even on error to get updated cooldown/rate limit state
+            await refresh();
             throw err;
         }
-    }, []);
+    }, [refresh]);
 
     // Load webhooks on mount
     useEffect(() => {

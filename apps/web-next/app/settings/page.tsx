@@ -6,7 +6,7 @@ import Link from "next/link";
 import { useSession } from "@/lib/useSession";
 import { useWebhooks } from "@/lib/alerts/useWebhooks";
 import type {
-  Webhook,
+  WebhookWithState,
   CreateWebhookRequest,
   UpdateWebhookRequest,
 } from "@/lib/alerts/useWebhooks";
@@ -44,8 +44,12 @@ export default function SettingsPage() {
   } = useWebhooks();
 
   const [isWebhookFormOpen, setIsWebhookFormOpen] = useState(false);
-  const [editingWebhook, setEditingWebhook] = useState<Webhook | undefined>();
-  const [deletingWebhook, setDeletingWebhook] = useState<Webhook | undefined>();
+  const [editingWebhook, setEditingWebhook] = useState<
+    WebhookWithState | undefined
+  >();
+  const [deletingWebhook, setDeletingWebhook] = useState<
+    WebhookWithState | undefined
+  >();
   const [isDeleting, setIsDeleting] = useState(false);
 
   // Redirect if unauthenticated
@@ -61,7 +65,7 @@ export default function SettingsPage() {
     setIsWebhookFormOpen(true);
   }
 
-  function handleEditWebhook(webhook: Webhook) {
+  function handleEditWebhook(webhook: WebhookWithState) {
     setEditingWebhook(webhook);
     setIsWebhookFormOpen(true);
   }
@@ -96,7 +100,7 @@ export default function SettingsPage() {
     }
   }
 
-  function handleDeleteWebhook(webhook: Webhook) {
+  function handleDeleteWebhook(webhook: WebhookWithState) {
     setDeletingWebhook(webhook);
   }
 
@@ -123,7 +127,7 @@ export default function SettingsPage() {
     }
   }
 
-  async function handleTestWebhook(webhook: Webhook) {
+  async function handleTestWebhook(webhook: WebhookWithState) {
     try {
       await sendTestWebhook(webhook.id);
       toast({

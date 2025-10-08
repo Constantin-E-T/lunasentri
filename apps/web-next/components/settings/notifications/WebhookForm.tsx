@@ -2,13 +2,13 @@
 
 import { useState, useEffect } from "react";
 import type {
-  Webhook,
+  WebhookWithState,
   CreateWebhookRequest,
   UpdateWebhookRequest,
 } from "@/lib/alerts/useWebhooks";
 
 interface WebhookFormProps {
-  webhook?: Webhook;
+  webhook?: WebhookWithState;
   isOpen: boolean;
   onClose: () => void;
   onSubmit: (
