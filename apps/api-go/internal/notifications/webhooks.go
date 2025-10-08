@@ -88,6 +88,25 @@ func (n *Notifier) Send(ctx context.Context, rule storage.AlertRule, event stora
 	return nil
 }
 
+// SendTest sends a test webhook payload to verify the webhook configuration
+func (n *Notifier) SendTest(ctx context.Context, webhook storage.Webhook) error {
+	// Build test payload with clearly marked test data
+	payload := WebhookPayload{
+		RuleID:       0,
+		RuleName:     "Test Webhook",
+		Metric:       "cpu_pct",
+		Comparison:   "above",
+		ThresholdPct: 80.0,
+		TriggerAfter: 1,
+		Value:        85.5,
+		TriggeredAt:  time.Now().Format(time.RFC3339),
+		EventID:      0,
+	}
+
+	// Send the test payload (reuses existing sendToWebhook logic)
+	return n.sendToWebhook(ctx, webhook, payload)
+}
+
 // getAllActiveWebhooks fetches all active webhooks from all users
 // TODO: Replace with user-scoped fetch once multi-tenant is implemented
 func (n *Notifier) getAllActiveWebhooks(ctx context.Context) ([]storage.Webhook, error) {

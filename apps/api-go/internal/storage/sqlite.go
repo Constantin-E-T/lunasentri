@@ -675,6 +675,28 @@ func (s *SQLiteStore) ListWebhooks(ctx context.Context, userID int) ([]Webhook, 
 	return webhooks, nil
 }
 
+// GetWebhook retrieves a single webhook by ID for a specific user
+func (s *SQLiteStore) GetWebhook(ctx context.Context, id int, userID int) (*Webhook, error) {
+	query := `SELECT id, user_id, url, secret_hash, is_active, failure_count,
+              last_success_at, last_error_at, created_at, updated_at
+              FROM webhooks WHERE id = ? AND user_id = ?`
+
+	webhook := &Webhook{}
+	err := s.db.QueryRowContext(ctx, query, id, userID).Scan(
+		&webhook.ID, &webhook.UserID, &webhook.URL, &webhook.SecretHash,
+		&webhook.IsActive, &webhook.FailureCount, &webhook.LastSuccessAt,
+		&webhook.LastErrorAt, &webhook.CreatedAt, &webhook.UpdatedAt)
+
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil, fmt.Errorf("webhook with id %d not found for user %d", id, userID)
+		}
+		return nil, fmt.Errorf("failed to fetch webhook: %w", err)
+	}
+
+	return webhook, nil
+}
+
 // CreateWebhook creates a new webhook for a user
 func (s *SQLiteStore) CreateWebhook(ctx context.Context, userID int, url, secretHash string) (*Webhook, error) {
 	now := time.Now()

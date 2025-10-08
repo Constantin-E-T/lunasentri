@@ -4,10 +4,26 @@ import { useState, FormEvent, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { useSession } from "@/lib/useSession";
+import { useWebhooks } from "@/lib/alerts/useWebhooks";
+import type {
+  Webhook,
+  CreateWebhookRequest,
+  UpdateWebhookRequest,
+} from "@/lib/alerts/useWebhooks";
+import {
+  WebhookList,
+  WebhookForm,
+  WebhookEmptyState,
+  DeleteWebhookDialog,
+} from "@/components/settings/notifications";
+import { useToast } from "@/components/ui/use-toast";
 
 export default function SettingsPage() {
   const router = useRouter();
   const { status, changePassword } = useSession();
+  const { toast } = useToast();
+
+  // Password change state
   const [currentPassword, setCurrentPassword] = useState("");
   const [newPassword, setNewPassword] = useState("");
   const [confirmNewPassword, setConfirmNewPassword] = useState("");
@@ -15,12 +31,116 @@ export default function SettingsPage() {
   const [success, setSuccess] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
 
+  // Webhook management state
+  const {
+    webhooks,
+    loading: webhooksLoading,
+    error: webhooksError,
+    createWebhook,
+    updateWebhook,
+    deleteWebhook,
+    sendTestWebhook,
+    refresh: refreshWebhooks,
+  } = useWebhooks();
+
+  const [isWebhookFormOpen, setIsWebhookFormOpen] = useState(false);
+  const [editingWebhook, setEditingWebhook] = useState<Webhook | undefined>();
+  const [deletingWebhook, setDeletingWebhook] = useState<Webhook | undefined>();
+  const [isDeleting, setIsDeleting] = useState(false);
+
   // Redirect if unauthenticated
   useEffect(() => {
     if (status === "unauthenticated") {
       router.push("/login");
     }
   }, [status, router]);
+
+  // Webhook handlers
+  function handleAddWebhook() {
+    setEditingWebhook(undefined);
+    setIsWebhookFormOpen(true);
+  }
+
+  function handleEditWebhook(webhook: Webhook) {
+    setEditingWebhook(webhook);
+    setIsWebhookFormOpen(true);
+  }
+
+  async function handleWebhookSubmit(
+    payload: CreateWebhookRequest | UpdateWebhookRequest
+  ) {
+    try {
+      if (editingWebhook) {
+        await updateWebhook(editingWebhook.id, payload as UpdateWebhookRequest);
+        toast({
+          title: "Webhook updated",
+          description: "Your webhook has been updated successfully.",
+        });
+      } else {
+        await createWebhook(payload as CreateWebhookRequest);
+        toast({
+          title: "Webhook created",
+          description: "Your webhook has been created successfully.",
+        });
+      }
+      setIsWebhookFormOpen(false);
+      setEditingWebhook(undefined);
+    } catch (err) {
+      toast({
+        title: "Error",
+        description:
+          err instanceof Error ? err.message : "Failed to save webhook",
+        variant: "destructive",
+      });
+      throw err;
+    }
+  }
+
+  function handleDeleteWebhook(webhook: Webhook) {
+    setDeletingWebhook(webhook);
+  }
+
+  async function confirmDeleteWebhook() {
+    if (!deletingWebhook) return;
+
+    setIsDeleting(true);
+    try {
+      await deleteWebhook(deletingWebhook.id);
+      toast({
+        title: "Webhook deleted",
+        description: "The webhook has been deleted successfully.",
+      });
+      setDeletingWebhook(undefined);
+    } catch (err) {
+      toast({
+        title: "Error",
+        description:
+          err instanceof Error ? err.message : "Failed to delete webhook",
+        variant: "destructive",
+      });
+    } finally {
+      setIsDeleting(false);
+    }
+  }
+
+  async function handleTestWebhook(webhook: Webhook) {
+    try {
+      await sendTestWebhook(webhook.id);
+      toast({
+        title: "Test sent",
+        description: `Test payload sent to ${webhook.url}`,
+      });
+    } catch (err) {
+      toast({
+        title: "Test failed",
+        description:
+          err instanceof Error ? err.message : "Failed to send test webhook",
+        variant: "destructive",
+      });
+    }
+  }
+
+  // Password change validation and handlers
 
   function validateForm(): string | null {
     if (!currentPassword.trim()) {
@@ -216,15 +336,67 @@ export default function SettingsPage() {
 
         {/* Additional Settings Placeholder */}
         <div className="mt-8 bg-card/70 backdrop-blur-xl rounded-xl p-8 shadow-2xl border border-border/30">
-          <h2 className="text-xl font-semibold text-card-foreground mb-4">
-            Account Information
-          </h2>
-          <p className="text-muted-foreground text-sm">
-            Additional account settings will be available here in future
-            updates.
-          </p>
+          <div className="flex items-center justify-between mb-6">
+            <div>
+              <h2 className="text-xl font-semibold text-card-foreground mb-1">
+                Notifications
+              </h2>
+              <p className="text-sm text-muted-foreground">
+                Manage webhook endpoints for alert notifications
+              </p>
+            </div>
+            {webhooks.length > 0 && (
+              <button
+                onClick={handleAddWebhook}
+                className="bg-primary hover:bg-primary/90 text-primary-foreground font-medium py-2 px-4 rounded-lg transition-all focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2 focus:ring-offset-background"
+              >
+                Add Webhook
+              </button>
+            )}
+          </div>
+
+          {webhooksLoading ? (
+            <div className="text-center py-8">
+              <div className="text-muted-foreground animate-pulse">
+                Loading webhooks...
+              </div>
+            </div>
+          ) : webhooksError ? (
+            <div className="bg-destructive/10 border border-destructive/30 rounded-lg p-4">
+              <p className="text-destructive text-sm">{webhooksError}</p>
+            </div>
+          ) : webhooks.length === 0 ? (
+            <WebhookEmptyState onAddWebhook={handleAddWebhook} />
+          ) : (
+            <WebhookList
+              webhooks={webhooks}
+              onEdit={handleEditWebhook}
+              onDelete={handleDeleteWebhook}
+              onTest={handleTestWebhook}
+            />
+          )}
         </div>
       </div>
+
+      {/* Webhook Form Dialog */}
+      <WebhookForm
+        webhook={editingWebhook}
+        isOpen={isWebhookFormOpen}
+        onClose={() => {
+          setIsWebhookFormOpen(false);
+          setEditingWebhook(undefined);
+        }}
+        onSubmit={handleWebhookSubmit}
+      />
+
+      {/* Delete Confirmation Dialog */}
+      <DeleteWebhookDialog
+        isOpen={!!deletingWebhook}
+        onClose={() => setDeletingWebhook(undefined)}
+        onConfirm={confirmDeleteWebhook}
+        webhookUrl={deletingWebhook?.url}
+        loading={isDeleting}
+      />
     </div>
   );
 }

@@ -1,6 +1,7 @@
 package notifications
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -349,5 +350,94 @@ func HandleDeleteWebhook(store storage.Store) http.HandlerFunc {
 
 		// Return 204 No Content on success
 		w.WriteHeader(http.StatusNoContent)
+	}
+}
+
+// TestWebhookResponse represents the response body for test webhook operation
+type TestWebhookResponse struct {
+	Status      string `json:"status"`
+	WebhookID   int    `json:"webhook_id"`
+	TriggeredAt string `json:"triggered_at"`
+}
+
+// HandleTestWebhook handles POST /notifications/webhooks/{id}/test
+func HandleTestWebhook(notifier AlertNotifier, store storage.Store) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
+
+		// Get user from context (set by RequireAuth middleware)
+		user, ok := auth.GetUserFromContext(r.Context())
+		if !ok {
+			http.Error(w, "Unauthorized", http.StatusUnauthorized)
+			return
+		}
+
+		// Extract webhook ID from URL path
+		// Path format: /notifications/webhooks/{id}/test
+		path := strings.TrimPrefix(r.URL.Path, "/notifications/webhooks/")
+		path = strings.TrimSuffix(path, "/test")
+
+		if path == "" || path == r.URL.Path {
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusBadRequest)
+			json.NewEncoder(w).Encode(map[string]string{"error": "Webhook ID required"})
+			return
+		}
+
+		// Parse webhook ID
+		webhookID, err := strconv.Atoi(path)
+		if err != nil {
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusBadRequest)
+			json.NewEncoder(w).Encode(map[string]string{"error": "Invalid webhook ID"})
+			return
+		}
+
+		// Fetch webhook with ownership verification
+		webhook, err := store.GetWebhook(r.Context(), webhookID, user.ID)
+		if err != nil {
+			if strings.Contains(err.Error(), "not found") {
+				w.Header().Set("Content-Type", "application/json")
+				w.WriteHeader(http.StatusNotFound)
+				json.NewEncoder(w).Encode(map[string]string{"error": "Webhook not found"})
+				return
+			}
+			http.Error(w, `{"error":"Failed to fetch webhook"}`, http.StatusInternalServerError)
+			return
+		}
+
+		// Require webhook to be active
+		if !webhook.IsActive {
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusBadRequest)
+			json.NewEncoder(w).Encode(map[string]string{"error": "Webhook must be active to send a test payload"})
+			return
+		}
+
+		// Create a context with timeout for the test request
+		ctx, cancel := context.WithTimeout(r.Context(), 10*time.Second)
+		defer cancel()
+
+		// Send test notification
+		if err := notifier.SendTest(ctx, *webhook); err != nil {
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusBadGateway)
+			json.NewEncoder(w).Encode(map[string]string{"error": fmt.Sprintf("Failed to send test webhook: %v", err)})
+			return
+		}
+
+		// Return success response
+		response := TestWebhookResponse{
+			Status:      "sent",
+			WebhookID:   webhookID,
+			TriggeredAt: time.Now().Format(time.RFC3339),
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		json.NewEncoder(w).Encode(response)
 	}
 }

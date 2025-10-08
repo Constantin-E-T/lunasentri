@@ -970,6 +970,74 @@ func TestSQLiteStore_ListWebhooks(t *testing.T) {
 	}
 }
 
+func TestSQLiteStore_GetWebhook(t *testing.T) {
+	store, err := NewSQLiteStore("file::memory:?cache=shared")
+	if err != nil {
+		t.Fatalf("Failed to create test store: %v", err)
+	}
+	defer store.Close()
+
+	ctx := context.Background()
+
+	// Create test users
+	user1, err := store.CreateUser(ctx, "user1@example.com", "password_hash")
+	if err != nil {
+		t.Fatalf("Failed to create user1: %v", err)
+	}
+
+	user2, err := store.CreateUser(ctx, "user2@example.com", "password_hash")
+	if err != nil {
+		t.Fatalf("Failed to create user2: %v", err)
+	}
+
+	// Create webhook for user1
+	secret := "test-secret-key-12345"
+	createdWebhook, err := store.CreateWebhook(ctx, user1.ID, "https://example.com/webhook", HashSecret(secret))
+	if err != nil {
+		t.Fatalf("Failed to create webhook: %v", err)
+	}
+
+	// Test fetching webhook with correct user
+	webhook, err := store.GetWebhook(ctx, createdWebhook.ID, user1.ID)
+	if err != nil {
+		t.Fatalf("Failed to get webhook: %v", err)
+	}
+
+	if webhook.ID != createdWebhook.ID {
+		t.Errorf("Expected webhook ID %d, got %d", createdWebhook.ID, webhook.ID)
+	}
+	if webhook.UserID != user1.ID {
+		t.Errorf("Expected user ID %d, got %d", user1.ID, webhook.UserID)
+	}
+	if webhook.URL != "https://example.com/webhook" {
+		t.Errorf("Expected URL https://example.com/webhook, got %s", webhook.URL)
+	}
+	if !webhook.IsActive {
+		t.Error("Expected webhook to be active")
+	}
+	if webhook.FailureCount != 0 {
+		t.Errorf("Expected failure count 0, got %d", webhook.FailureCount)
+	}
+
+	// Test fetching webhook with wrong user (should fail)
+	_, err = store.GetWebhook(ctx, createdWebhook.ID, user2.ID)
+	if err == nil {
+		t.Error("Expected error when fetching webhook with wrong user ID")
+	}
+	if err.Error() != "webhook with id 1 not found for user 2" {
+		t.Errorf("Expected specific error message, got: %v", err)
+	}
+
+	// Test fetching non-existent webhook
+	_, err = store.GetWebhook(ctx, 9999, user1.ID)
+	if err == nil {
+		t.Error("Expected error when fetching non-existent webhook")
+	}
+	if err.Error() != "webhook with id 9999 not found for user 1" {
+		t.Errorf("Expected specific error message, got: %v", err)
+	}
+}
+
 func TestSQLiteStore_UpdateWebhook(t *testing.T) {
 	store, err := NewSQLiteStore("file::memory:?cache=shared")
 	if err != nil {

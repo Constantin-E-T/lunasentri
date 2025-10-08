@@ -76,6 +76,7 @@ type Store interface {
 
 	// Webhook methods
 	ListWebhooks(ctx context.Context, userID int) ([]Webhook, error)
+	GetWebhook(ctx context.Context, id int, userID int) (*Webhook, error)
 	CreateWebhook(ctx context.Context, userID int, url, secretHash string) (*Webhook, error)
 	UpdateWebhook(ctx context.Context, id int, userID int, url string, secretHash *string, isActive *bool) (*Webhook, error)
 	DeleteWebhook(ctx context.Context, id int, userID int) error

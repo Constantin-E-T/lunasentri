@@ -641,7 +641,7 @@ func handleSystemInfo(systemService system.Service) http.HandlerFunc {
 }
 
 // newServer creates a new HTTP server with the given collector, auth service, alert service, and system service
-func newServer(collector metrics.Collector, startTime time.Time, authService *auth.Service, alertService *alerts.Service, systemService system.Service, store storage.Store, accessTTL time.Duration, passwordResetTTL time.Duration, secureCookie bool) *http.ServeMux {
+func newServer(collector metrics.Collector, startTime time.Time, authService *auth.Service, alertService *alerts.Service, systemService system.Service, store storage.Store, notifier notifications.AlertNotifier, accessTTL time.Duration, passwordResetTTL time.Duration, secureCookie bool) *http.ServeMux {
 	// Create a new ServeMux
 	mux := http.NewServeMux()
 
@@ -730,6 +730,12 @@ func newServer(collector metrics.Collector, startTime time.Time, authService *au
 		}
 	})))
 	mux.Handle("/notifications/webhooks/", authService.RequireAuth(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// Check if this is a test webhook request
+		if strings.HasSuffix(r.URL.Path, "/test") && r.Method == http.MethodPost {
+			notifications.HandleTestWebhook(notifier, store)(w, r)
+			return
+		}
+
 		if r.Method == http.MethodPut {
 			notifications.HandleUpdateWebhook(store)(w, r)
 		} else if r.Method == http.MethodDelete {
@@ -1074,7 +1080,7 @@ func main() {
 	alertService := alerts.NewService(store, webhookNotifier)
 
 	// Create server with real collector, auth service, alert service, and system service
-	mux := newServer(metricsCollector, serverStartTime, authService, alertService, systemService, store, accessTTL, passwordResetTTL, secureCookie)
+	mux := newServer(metricsCollector, serverStartTime, authService, alertService, systemService, store, webhookNotifier, accessTTL, passwordResetTTL, secureCookie)
 
 	// Create HTTP server with CORS middleware
 	port := "8080"

@@ -205,6 +205,10 @@ func (m *mockStore) ListWebhooks(ctx context.Context, userID int) ([]storage.Web
 	return []storage.Webhook{}, nil
 }
 
+func (m *mockStore) GetWebhook(ctx context.Context, id int, userID int) (*storage.Webhook, error) {
+	return &storage.Webhook{ID: id, UserID: userID, URL: "https://example.com/webhook", IsActive: true}, nil
+}
+
 func (m *mockStore) UpdateWebhook(ctx context.Context, id int, userID int, url string, secretHash *string, isActive *bool) (*storage.Webhook, error) {
 	return &storage.Webhook{ID: id, UserID: userID, URL: url, IsActive: true}, nil
 }

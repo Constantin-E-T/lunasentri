@@ -42,6 +42,15 @@ func (m *mockStore) ListWebhooks(ctx context.Context, userID int) ([]storage.Web
 	return m.webhooks[userID], nil
 }
 
+func (m *mockStore) GetWebhook(ctx context.Context, id int, userID int) (*storage.Webhook, error) {
+	for _, webhook := range m.webhooks[userID] {
+		if webhook.ID == id {
+			return &webhook, nil
+		}
+	}
+	return nil, fmt.Errorf("webhook with id %d not found for user %d", id, userID)
+}
+
 func (m *mockStore) IncrementWebhookFailure(ctx context.Context, id int, lastErrorAt time.Time) error {
 	m.failureCounts[id]++
 	return nil
@@ -473,4 +482,118 @@ func TestNotifier_Send_InactiveWebhooks(t *testing.T) {
 	}
 
 	// Should succeed without error even with only inactive webhooks
+}
+
+func TestNotifier_SendTest_Success(t *testing.T) {
+	// Setup mock HTTP server
+	var receivedPayload WebhookPayload
+	var receivedSignature string
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// Verify headers
+		if r.Header.Get("Content-Type") != "application/json" {
+			t.Errorf("Expected Content-Type application/json, got %s", r.Header.Get("Content-Type"))
+		}
+
+		receivedSignature = r.Header.Get("X-LunaSentri-Signature")
+		if receivedSignature == "" {
+			t.Error("Expected X-LunaSentri-Signature header")
+		}
+
+		// Read and parse payload
+		body, err := io.ReadAll(r.Body)
+		if err != nil {
+			t.Fatalf("Failed to read request body: %v", err)
+		}
+
+		if err := json.Unmarshal(body, &receivedPayload); err != nil {
+			t.Fatalf("Failed to unmarshal payload: %v", err)
+		}
+
+		// Return success
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer server.Close()
+
+	// Setup mock store
+	store := newMockStore()
+
+	// Create notifier
+	notifier := NewNotifier(store, log.Default())
+
+	// Create test webhook
+	secret := "test-secret-key-12345"
+	webhook := storage.Webhook{
+		ID:         1,
+		UserID:     1,
+		URL:        server.URL,
+		SecretHash: storage.HashSecret(secret),
+		IsActive:   true,
+	}
+
+	// Send test notification
+	ctx := context.Background()
+	err := notifier.SendTest(ctx, webhook)
+	if err != nil {
+		t.Fatalf("SendTest failed: %v", err)
+	}
+
+	// Verify the payload was marked as a test
+	if receivedPayload.RuleName != "Test Webhook" {
+		t.Errorf("Expected test rule name 'Test Webhook', got %s", receivedPayload.RuleName)
+	}
+	if receivedPayload.RuleID != 0 {
+		t.Errorf("Expected test rule ID 0, got %d", receivedPayload.RuleID)
+	}
+	if receivedPayload.EventID != 0 {
+		t.Errorf("Expected test event ID 0, got %d", receivedPayload.EventID)
+	}
+
+	// Verify signature was received
+	if receivedSignature == "" {
+		t.Error("No signature received")
+	}
+
+	// Verify success was marked
+	if store.failureCounts[webhook.ID] != 0 {
+		t.Errorf("Expected failure count 0, got %d", store.failureCounts[webhook.ID])
+	}
+	if store.successTimes[webhook.ID].IsZero() {
+		t.Error("Expected success time to be set")
+	}
+}
+
+func TestNotifier_SendTest_Failure(t *testing.T) {
+	// Setup mock HTTP server that returns error
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusInternalServerError)
+	}))
+	defer server.Close()
+
+	// Setup mock store
+	store := newMockStore()
+
+	// Create notifier
+	notifier := NewNotifier(store, log.Default())
+
+	// Create test webhook
+	secret := "test-secret-key-12345"
+	webhook := storage.Webhook{
+		ID:         1,
+		UserID:     1,
+		URL:        server.URL,
+		SecretHash: storage.HashSecret(secret),
+		IsActive:   true,
+	}
+
+	// Send test notification (should fail after retries)
+	ctx := context.Background()
+	err := notifier.SendTest(ctx, webhook)
+	if err == nil {
+		t.Fatal("Expected SendTest to fail, but it succeeded")
+	}
+
+	// Verify failure was tracked
+	if store.failureCounts[webhook.ID] != 1 {
+		t.Errorf("Expected failure count 1, got %d", store.failureCounts[webhook.ID])
+	}
 }

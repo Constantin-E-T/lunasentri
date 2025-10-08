@@ -118,6 +118,100 @@ curl -X DELETE http://localhost:8080/notifications/webhooks/1 \
 
 **Next Steps**
 
-- [ ] Frontend: Settings UI for managing webhook URLs/secrets + test payload action
-- [ ] Enhanced monitoring: Rate limiting and circuit breaker patterns  
-- [ ] Additional channels: Email, Slack, Telegram integrations
+- [x] Frontend: build notifications settings UI to list/add/edit/delete webhooks and trigger test payloads.
+- [x] Backend: add `POST /notifications/webhooks/{id}/test` endpoint to trigger a signed test payload for the owning user.
+- [ ] Enhanced monitoring: rate limiting + circuit breaker patterns for webhook delivery.
+- [ ] Additional channels: email, Slack, Telegram integrations.
+
+**Test Webhook Endpoint**
+
+**POST `/notifications/webhooks/{id}/test`**
+
+Sends a test webhook notification to verify the configuration. Requires authentication and webhook ownership.
+
+**Request:** No request body required.
+
+**Success Response (200):**
+
+```json
+{
+  "status": "sent",
+  "webhook_id": 1,
+  "triggered_at": "2025-10-08T12:34:56Z"
+}
+```
+
+**Test Payload Example:**
+
+```json
+{
+  "rule_id": 0,
+  "rule_name": "Test Webhook",
+  "metric": "cpu_pct",
+  "comparison": "above",
+  "threshold_pct": 80.0,
+  "trigger_after": 1,
+  "value": 85.5,
+  "triggered_at": "2025-10-08T12:34:56Z",
+  "event_id": 0
+}
+```
+
+**Error Responses:**
+
+- `401 Unauthorized`: User not authenticated
+- `400 Bad Request`: Invalid webhook ID or webhook is inactive
+- `404 Not Found`: Webhook not found or belongs to another user
+- `502 Bad Gateway`: Test webhook delivery failed
+
+**Security:**
+
+- Validates user ownership of webhook
+- Requires webhook to be active
+- Uses 10-second timeout for delivery
+- Updates success/failure tracking like normal alerts
+
+**Example curl:**
+
+```bash
+# Send test webhook
+curl -X POST http://localhost:8080/notifications/webhooks/1/test \
+  -H "Cookie: lunasentri_session=..."
+```
+
+**Frontend Implementation (Completed)**
+
+The webhook management UI has been fully implemented in the Settings page:
+
+**Components Created:**
+
+- `lib/alerts/useWebhooks.ts` - React hook for webhook CRUD operations with proper error handling
+- `components/settings/notifications/WebhookList.tsx` - Displays webhooks with status pills and action buttons
+- `components/settings/notifications/WebhookForm.tsx` - Modal form for creating/editing webhooks
+- `components/settings/notifications/WebhookEmptyState.tsx` - Encourages first webhook setup
+- `components/settings/notifications/DeleteWebhookDialog.tsx` - Confirmation dialog for deletion
+
+**Features:**
+
+- ✅ List all user webhooks with status (Active/Inactive) and failure tracking
+- ✅ Create new webhooks with HTTPS URL validation and 16-128 char secret requirements
+- ✅ Edit existing webhooks (URL, secret rotation, active toggle)
+- ✅ Delete webhooks with confirmation dialog
+- ✅ Send test payloads to verify webhook configuration
+- ✅ Toast notifications for all operations (success/error feedback)
+- ✅ Proper error handling with inline validation
+- ✅ Glassmorphism design matching LunaSentri aesthetic
+
+**User Experience:**
+
+- Status pills show webhook health (emerald for active, amber for failures, red for high failures)
+- Secret masking displays last 4 characters only (e.g., `••••2345`)
+- Relative timestamps for last success/error (e.g., "2h ago", "5m ago")
+- Form validation prevents HTTP URLs and enforces secret length requirements
+- Empty state provides helpful onboarding information
+
+**Testing:**
+
+- ✅ Unit tests for `useWebhooks` hook covering success, error, and auth expiry cases
+- ✅ All existing tests continue to pass
+- ✅ Build verification successful with Turbopack

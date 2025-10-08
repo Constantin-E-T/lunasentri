@@ -1,7 +1,7 @@
 # LunaSentri CTO Execution Plan
 
 > Last reviewed: 2025-10-07
-> Guardrails: zero-trust mindset, no unaudited binaries, customer data isolation by default.
+> Guardrails: zero-trust mindset, no unaudited binaries, customer data isolation by default. Review `docs/AGENT_GUIDELINES.md` before assigning or starting any task.
 
 ## Mission Focus
 - [ ] Deliver multi-tenant monitoring with uncompromised security posture
@@ -50,3 +50,4 @@
 - Roadmap items in `docs/ROADMAP.md` feed into this plan; sync weekly.
 - Treat security items as product features—define owners, due dates, and success metrics.
 - Detailed feature context lives under `project/context/`; review relevant note before kicking off work.
+- Break work into small, verifiable tasks to prevent drift or speculative implementation.

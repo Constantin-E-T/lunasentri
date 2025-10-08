@@ -39,6 +39,15 @@ func (m *mockHTTPStore) ListWebhooks(ctx context.Context, userID int) ([]storage
 	return m.webhooks[userID], nil
 }
 
+func (m *mockHTTPStore) GetWebhook(ctx context.Context, id int, userID int) (*storage.Webhook, error) {
+	for _, webhook := range m.webhooks[userID] {
+		if webhook.ID == id {
+			return &webhook, nil
+		}
+	}
+	return nil, fmt.Errorf("webhook with id %d not found for user %d", id, userID)
+}
+
 func (m *mockHTTPStore) CreateWebhook(ctx context.Context, userID int, url, secretHash string) (*storage.Webhook, error) {
 	if m.failCreate {
 		return nil, fmt.Errorf("mock create failure")
@@ -589,5 +598,265 @@ func TestGetSecretLastFour(t *testing.T) {
 		if result != tc.expected {
 			t.Errorf("For secret '%s' (len=%d), expected '%s', got '%s'", tc.secret, len(tc.secret), tc.expected, result)
 		}
+	}
+}
+
+// mockNotifier is a test implementation that records calls
+type mockNotifier struct {
+	sendTestCalls []storage.Webhook
+	sendTestError error
+}
+
+func (m *mockNotifier) Notify(ctx context.Context, rule storage.AlertRule, event *storage.AlertEvent) error {
+	return nil
+}
+
+func (m *mockNotifier) SendTest(ctx context.Context, webhook storage.Webhook) error {
+	m.sendTestCalls = append(m.sendTestCalls, webhook)
+	return m.sendTestError
+}
+
+func TestHandleTestWebhook_Success(t *testing.T) {
+	store := newMockHTTPStore()
+	notifier := &mockNotifier{}
+
+	// Create a test user and webhook
+	user := &storage.User{ID: 1, Email: "test@example.com"}
+	webhook, _ := store.CreateWebhook(context.Background(), user.ID, "https://example.com/webhook", storage.HashSecret("secret"))
+
+	// Create request with user context
+	req := httptest.NewRequest(http.MethodPost, "/notifications/webhooks/1/test", nil)
+	ctx := context.WithValue(req.Context(), auth.UserContextKey, user)
+	req = req.WithContext(ctx)
+	rec := httptest.NewRecorder()
+
+	// Handle request
+	handler := HandleTestWebhook(notifier, store)
+	handler(rec, req)
+
+	// Check response
+	if rec.Code != http.StatusOK {
+		t.Errorf("Expected status 200, got %d. Body: %s", rec.Code, rec.Body.String())
+	}
+
+	// Verify notifier was called
+	if len(notifier.sendTestCalls) != 1 {
+		t.Fatalf("Expected 1 SendTest call, got %d", len(notifier.sendTestCalls))
+	}
+
+	if notifier.sendTestCalls[0].ID != webhook.ID {
+		t.Errorf("Expected webhook ID %d, got %d", webhook.ID, notifier.sendTestCalls[0].ID)
+	}
+
+	// Verify response body
+	var response TestWebhookResponse
+	if err := json.NewDecoder(rec.Body).Decode(&response); err != nil {
+		t.Fatalf("Failed to decode response: %v", err)
+	}
+
+	if response.Status != "sent" {
+		t.Errorf("Expected status 'sent', got '%s'", response.Status)
+	}
+	if response.WebhookID != webhook.ID {
+		t.Errorf("Expected webhook_id %d, got %d", webhook.ID, response.WebhookID)
+	}
+	if response.TriggeredAt == "" {
+		t.Error("Expected triggered_at to be set")
+	}
+}
+
+func TestHandleTestWebhook_Unauthorized(t *testing.T) {
+	store := newMockHTTPStore()
+	notifier := &mockNotifier{}
+
+	// Create request without user context
+	req := httptest.NewRequest(http.MethodPost, "/notifications/webhooks/1/test", nil)
+	rec := httptest.NewRecorder()
+
+	// Handle request
+	handler := HandleTestWebhook(notifier, store)
+	handler(rec, req)
+
+	// Check response
+	if rec.Code != http.StatusUnauthorized {
+		t.Errorf("Expected status 401, got %d", rec.Code)
+	}
+
+	// Verify notifier was not called
+	if len(notifier.sendTestCalls) != 0 {
+		t.Errorf("Expected 0 SendTest calls, got %d", len(notifier.sendTestCalls))
+	}
+}
+
+func TestHandleTestWebhook_NotFound(t *testing.T) {
+	store := newMockHTTPStore()
+	notifier := &mockNotifier{}
+
+	// Create a test user (but no webhook)
+	user := &storage.User{ID: 1, Email: "test@example.com"}
+
+	// Create request for non-existent webhook
+	req := httptest.NewRequest(http.MethodPost, "/notifications/webhooks/999/test", nil)
+	ctx := context.WithValue(req.Context(), auth.UserContextKey, user)
+	req = req.WithContext(ctx)
+	rec := httptest.NewRecorder()
+
+	// Handle request
+	handler := HandleTestWebhook(notifier, store)
+	handler(rec, req)
+
+	// Check response
+	if rec.Code != http.StatusNotFound {
+		t.Errorf("Expected status 404, got %d. Body: %s", rec.Code, rec.Body.String())
+	}
+
+	// Verify notifier was not called
+	if len(notifier.sendTestCalls) != 0 {
+		t.Errorf("Expected 0 SendTest calls, got %d", len(notifier.sendTestCalls))
+	}
+}
+
+func TestHandleTestWebhook_InactiveWebhook(t *testing.T) {
+	store := newMockHTTPStore()
+	notifier := &mockNotifier{}
+
+	// Create a test user and inactive webhook
+	user := &storage.User{ID: 1, Email: "test@example.com"}
+	webhook, _ := store.CreateWebhook(context.Background(), user.ID, "https://example.com/webhook", storage.HashSecret("secret"))
+
+	// Make webhook inactive
+	isActive := false
+	store.UpdateWebhook(context.Background(), webhook.ID, user.ID, "", nil, &isActive)
+
+	// Create request
+	req := httptest.NewRequest(http.MethodPost, "/notifications/webhooks/1/test", nil)
+	ctx := context.WithValue(req.Context(), auth.UserContextKey, user)
+	req = req.WithContext(ctx)
+	rec := httptest.NewRecorder()
+
+	// Handle request
+	handler := HandleTestWebhook(notifier, store)
+	handler(rec, req)
+
+	// Check response
+	if rec.Code != http.StatusBadRequest {
+		t.Errorf("Expected status 400, got %d. Body: %s", rec.Code, rec.Body.String())
+	}
+
+	// Verify error message
+	var errorResp map[string]string
+	if err := json.NewDecoder(rec.Body).Decode(&errorResp); err != nil {
+		t.Fatalf("Failed to decode error response: %v", err)
+	}
+
+	expectedMsg := "Webhook must be active to send a test payload"
+	if errorResp["error"] != expectedMsg {
+		t.Errorf("Expected error '%s', got '%s'", expectedMsg, errorResp["error"])
+	}
+
+	// Verify notifier was not called
+	if len(notifier.sendTestCalls) != 0 {
+		t.Errorf("Expected 0 SendTest calls, got %d", len(notifier.sendTestCalls))
+	}
+}
+
+func TestHandleTestWebhook_NotifierFailure(t *testing.T) {
+	store := newMockHTTPStore()
+	notifier := &mockNotifier{
+		sendTestError: fmt.Errorf("webhook delivery failed"),
+	}
+
+	// Create a test user and webhook
+	user := &storage.User{ID: 1, Email: "test@example.com"}
+	_, _ = store.CreateWebhook(context.Background(), user.ID, "https://example.com/webhook", storage.HashSecret("secret"))
+
+	// Create request
+	req := httptest.NewRequest(http.MethodPost, "/notifications/webhooks/1/test", nil)
+	ctx := context.WithValue(req.Context(), auth.UserContextKey, user)
+	req = req.WithContext(ctx)
+	rec := httptest.NewRecorder()
+
+	// Handle request
+	handler := HandleTestWebhook(notifier, store)
+	handler(rec, req)
+
+	// Check response
+	if rec.Code != http.StatusBadGateway {
+		t.Errorf("Expected status 502, got %d. Body: %s", rec.Code, rec.Body.String())
+	}
+
+	// Verify notifier was called
+	if len(notifier.sendTestCalls) != 1 {
+		t.Errorf("Expected 1 SendTest call, got %d", len(notifier.sendTestCalls))
+	}
+
+	// Verify error message contains the failure
+	var errorResp map[string]string
+	if err := json.NewDecoder(rec.Body).Decode(&errorResp); err != nil {
+		t.Fatalf("Failed to decode error response: %v", err)
+	}
+
+	if !strings.Contains(errorResp["error"], "Failed to send test webhook") {
+		t.Errorf("Expected error to contain 'Failed to send test webhook', got '%s'", errorResp["error"])
+	}
+}
+
+func TestHandleTestWebhook_InvalidID(t *testing.T) {
+	store := newMockHTTPStore()
+	notifier := &mockNotifier{}
+
+	// Create a test user
+	user := &storage.User{ID: 1, Email: "test@example.com"}
+
+	// Create request with invalid ID
+	req := httptest.NewRequest(http.MethodPost, "/notifications/webhooks/invalid/test", nil)
+	ctx := context.WithValue(req.Context(), auth.UserContextKey, user)
+	req = req.WithContext(ctx)
+	rec := httptest.NewRecorder()
+
+	// Handle request
+	handler := HandleTestWebhook(notifier, store)
+	handler(rec, req)
+
+	// Check response
+	if rec.Code != http.StatusBadRequest {
+		t.Errorf("Expected status 400, got %d", rec.Code)
+	}
+
+	// Verify notifier was not called
+	if len(notifier.sendTestCalls) != 0 {
+		t.Errorf("Expected 0 SendTest calls, got %d", len(notifier.sendTestCalls))
+	}
+}
+
+func TestHandleTestWebhook_WrongUser(t *testing.T) {
+	store := newMockHTTPStore()
+	notifier := &mockNotifier{}
+
+	// Create two users
+	user1 := &storage.User{ID: 1, Email: "user1@example.com"}
+	user2 := &storage.User{ID: 2, Email: "user2@example.com"}
+
+	// Create webhook for user1
+	_, _ = store.CreateWebhook(context.Background(), user1.ID, "https://example.com/webhook", storage.HashSecret("secret"))
+
+	// Try to access user1's webhook as user2
+	req := httptest.NewRequest(http.MethodPost, "/notifications/webhooks/1/test", nil)
+	ctx := context.WithValue(req.Context(), auth.UserContextKey, user2)
+	req = req.WithContext(ctx)
+	rec := httptest.NewRecorder()
+
+	// Handle request
+	handler := HandleTestWebhook(notifier, store)
+	handler(rec, req)
+
+	// Check response
+	if rec.Code != http.StatusNotFound {
+		t.Errorf("Expected status 404, got %d. Body: %s", rec.Code, rec.Body.String())
+	}
+
+	// Verify notifier was not called
+	if len(notifier.sendTestCalls) != 0 {
+		t.Errorf("Expected 0 SendTest calls, got %d", len(notifier.sendTestCalls))
 	}
 }

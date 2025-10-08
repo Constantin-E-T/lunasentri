@@ -88,6 +88,10 @@ func (n *noOpNotifier) Notify(ctx context.Context, rule storage.AlertRule, event
 	return nil
 }
 
+func (n *noOpNotifier) SendTest(ctx context.Context, webhook storage.Webhook) error {
+	return nil
+}
+
 func TestSystemInfoHandler(t *testing.T) {
 	// Setup fake system service with known values
 	fakeSystemInfo := system.SystemInfo{
@@ -111,13 +115,14 @@ func TestSystemInfoHandler(t *testing.T) {
 	store := createTestStore(t)
 	authService := createTestAuthService(t)
 	alertService := createTestAlertService(t)
+	notifier := &noOpNotifier{}
 	collector := &fakeCollector{
 		metricsToReturn: metrics.Metrics{},
 		errToReturn:     nil,
 	}
 
 	// Create server
-	mux := newServer(collector, time.Now(), authService, alertService, systemService, store, 15*time.Minute, 15*time.Minute, false)
+	mux := newServer(collector, time.Now(), authService, alertService, systemService, store, notifier, 15*time.Minute, 15*time.Minute, false)
 	server := httptest.NewServer(corsMiddleware(mux))
 	defer server.Close()
 
@@ -173,13 +178,14 @@ func TestSystemInfoHandlerError(t *testing.T) {
 	store := createTestStore(t)
 	authService := createTestAuthService(t)
 	alertService := createTestAlertService(t)
+	notifier := &noOpNotifier{}
 	collector := &fakeCollector{
 		metricsToReturn: metrics.Metrics{},
 		errToReturn:     nil,
 	}
 
 	// Create server
-	mux := newServer(collector, time.Now(), authService, alertService, systemService, store, 15*time.Minute, 15*time.Minute, false)
+	mux := newServer(collector, time.Now(), authService, alertService, systemService, store, notifier, 15*time.Minute, 15*time.Minute, false)
 	server := httptest.NewServer(corsMiddleware(mux))
 	defer server.Close()
 
@@ -209,13 +215,14 @@ func TestSystemInfoHandlerMethodNotAllowed(t *testing.T) {
 	store := createTestStore(t)
 	authService := createTestAuthService(t)
 	alertService := createTestAlertService(t)
+	notifier := &noOpNotifier{}
 	collector := &fakeCollector{
 		metricsToReturn: metrics.Metrics{},
 		errToReturn:     nil,
 	}
 
 	// Create server
-	mux := newServer(collector, time.Now(), authService, alertService, systemService, store, 15*time.Minute, 15*time.Minute, false)
+	mux := newServer(collector, time.Now(), authService, alertService, systemService, store, notifier, 15*time.Minute, 15*time.Minute, false)
 	server := httptest.NewServer(corsMiddleware(mux))
 	defer server.Close()
 
