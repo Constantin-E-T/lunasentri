@@ -3,6 +3,7 @@
 **TL;DR** – Webhooks retry automatically today (1s/2s/4s). ✅ **COMPLETED**: Added rate limiting and circuit breaker protection for webhook deliveries.
 
 **Goals** ✅ Complete
+
 - Avoid spamming a failing webhook (back off quickly after repeated failures).
 - Provide visibility (failure counts, lockout timers) to users and ops.
 - Keep implementation simple enough to fit the current SQLite-backed service.
@@ -26,6 +27,7 @@
 **API Response Changes**
 
 Webhook list responses now include:
+
 ```json
 {
   "id": 1,
