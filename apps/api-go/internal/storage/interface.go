@@ -82,6 +82,7 @@ type Store interface {
 	DeleteWebhook(ctx context.Context, id int, userID int) error
 	IncrementWebhookFailure(ctx context.Context, id int, lastErrorAt time.Time) error
 	MarkWebhookSuccess(ctx context.Context, id int, lastSuccessAt time.Time) error
+	UpdateWebhookDeliveryState(ctx context.Context, id int, lastAttemptAt time.Time, cooldownUntil *time.Time) error
 
 	// Close closes the storage connection
 	Close() error
@@ -129,6 +130,8 @@ type Webhook struct {
 	FailureCount  int        `json:"failure_count"`
 	LastSuccessAt *time.Time `json:"last_success_at"`
 	LastErrorAt   *time.Time `json:"last_error_at"`
+	CooldownUntil *time.Time `json:"cooldown_until"`  // Circuit breaker cooldown end time
+	LastAttemptAt *time.Time `json:"last_attempt_at"` // Last delivery attempt for rate limiting
 	CreatedAt     time.Time  `json:"created_at"`
 	UpdatedAt     time.Time  `json:"updated_at"`
 }

@@ -204,6 +204,9 @@ func (m *mockHTTPStore) IncrementWebhookFailure(ctx context.Context, id int, las
 func (m *mockHTTPStore) MarkWebhookSuccess(ctx context.Context, id int, lastSuccessAt time.Time) error {
 	return fmt.Errorf("not implemented")
 }
+func (m *mockHTTPStore) UpdateWebhookDeliveryState(ctx context.Context, id int, lastAttemptAt time.Time, cooldownUntil *time.Time) error {
+	return fmt.Errorf("not implemented")
+}
 func (m *mockHTTPStore) Close() error {
 	return nil
 }

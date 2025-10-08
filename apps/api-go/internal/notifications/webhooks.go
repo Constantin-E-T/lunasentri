@@ -16,6 +16,14 @@ import (
 	"github.com/Constantin-E-T/lunasentri/apps/api-go/internal/storage"
 )
 
+const (
+	// TODO: Make these configurable later
+	MinAttemptInterval = 30 * time.Second // Minimum interval between delivery attempts
+	FailureThreshold   = 3                // Number of failures within window to trigger cooldown
+	FailureWindow      = 10 * time.Minute // Time window for counting failures
+	CooldownDuration   = 15 * time.Minute // Duration of cooldown after reaching failure threshold
+)
+
 // WebhookPayload represents the JSON payload sent to webhooks
 type WebhookPayload struct {
 	RuleID       int     `json:"rule_id"`
@@ -90,6 +98,11 @@ func (n *Notifier) Send(ctx context.Context, rule storage.AlertRule, event stora
 
 // SendTest sends a test webhook payload to verify the webhook configuration
 func (n *Notifier) SendTest(ctx context.Context, webhook storage.Webhook) error {
+	// Check rate limiting and cooldown before proceeding
+	if err := n.checkDeliveryPreconditions(webhook); err != nil {
+		return err
+	}
+
 	// Build test payload with clearly marked test data
 	payload := WebhookPayload{
 		RuleID:       0,
@@ -138,6 +151,11 @@ func (n *Notifier) getAllActiveWebhooks(ctx context.Context) ([]storage.Webhook,
 
 // sendToWebhook sends the payload to a specific webhook with retry logic
 func (n *Notifier) sendToWebhook(ctx context.Context, webhook storage.Webhook, payload WebhookPayload) error {
+	// Check rate limiting and cooldown before proceeding
+	if err := n.checkDeliveryPreconditions(webhook); err != nil {
+		return err
+	}
+
 	payloadBytes, err := json.Marshal(payload)
 	if err != nil {
 		return fmt.Errorf("failed to marshal payload: %w", err)
@@ -156,8 +174,13 @@ func (n *Notifier) sendToWebhook(ctx context.Context, webhook storage.Webhook, p
 		domain = webhook.URL // fallback for invalid URLs
 	}
 
+	// Update last attempt time before making the request
+	now := time.Now()
+	if err := n.store.UpdateWebhookDeliveryState(ctx, webhook.ID, now, webhook.CooldownUntil); err != nil {
+		n.logger.Printf("[WEBHOOK] failed to update delivery state for webhook=%d: %v", webhook.ID, err)
+	}
+
 	// Retry logic with exponential backoff
-	// TODO: Add rate limiting and circuit breaker patterns for improved reliability
 	maxRetries := 3
 	for attempt := 1; attempt <= maxRetries; attempt++ {
 		select {
@@ -181,12 +204,27 @@ func (n *Notifier) sendToWebhook(ctx context.Context, webhook storage.Webhook, p
 		n.logger.Printf("[WEBHOOK] failed webhook=%d url=%s attempt=%d error=%v",
 			webhook.ID, domain, attempt, err)
 
-		// If this was the last attempt, mark as failure
+		// If this was the last attempt, mark as failure and potentially set cooldown
 		if attempt == maxRetries {
 			if markErr := n.store.IncrementWebhookFailure(ctx, webhook.ID, time.Now()); markErr != nil {
 				n.logger.Printf("[WEBHOOK] failed to increment failure count for webhook=%d: %v",
 					webhook.ID, markErr)
 			}
+
+			// Check if we should enter cooldown based on failure threshold
+			updatedWebhook, fetchErr := n.store.GetWebhook(ctx, webhook.ID, webhook.UserID)
+			if fetchErr != nil {
+				n.logger.Printf("[WEBHOOK] failed to fetch updated webhook=%d: %v", webhook.ID, fetchErr)
+			} else if n.shouldEnterCooldown(*updatedWebhook) {
+				cooldownUntil := time.Now().Add(CooldownDuration)
+				if cooldownErr := n.store.UpdateWebhookDeliveryState(ctx, webhook.ID, now, &cooldownUntil); cooldownErr != nil {
+					n.logger.Printf("[WEBHOOK] failed to set cooldown for webhook=%d: %v", webhook.ID, cooldownErr)
+				} else {
+					n.logger.Printf("[WEBHOOK] cooldown webhook=%d until=%s",
+						webhook.ID, cooldownUntil.Format(time.RFC3339))
+				}
+			}
+
 			n.logger.Printf("[WEBHOOK] failed webhook=%d url=%s attempts=%d final_error=%v",
 				webhook.ID, domain, maxRetries, err)
 			return fmt.Errorf("webhook delivery failed after %d attempts: %w", maxRetries, err)
@@ -242,4 +280,67 @@ func (n *Notifier) makeHTTPRequest(ctx context.Context, url string, payload []by
 	}
 
 	return resp.StatusCode, nil
+}
+
+// checkDeliveryPreconditions verifies if a webhook delivery should proceed based on rate limiting and cooldown
+func (n *Notifier) checkDeliveryPreconditions(webhook storage.Webhook) error {
+	now := time.Now()
+
+	// Check if webhook is in cooldown
+	if webhook.CooldownUntil != nil && now.Before(*webhook.CooldownUntil) {
+		n.logger.Printf("[WEBHOOK] throttled webhook=%d reason=cooldown until=%s",
+			webhook.ID, webhook.CooldownUntil.Format(time.RFC3339))
+		return &RateLimitError{
+			Type:    "cooldown",
+			Message: fmt.Sprintf("Webhook in cooldown until %s", webhook.CooldownUntil.Format(time.RFC3339)),
+			RetryAt: webhook.CooldownUntil,
+		}
+	}
+
+	// Check minimum interval between attempts
+	if webhook.LastAttemptAt != nil {
+		timeSinceLastAttempt := now.Sub(*webhook.LastAttemptAt)
+		if timeSinceLastAttempt < MinAttemptInterval {
+			delay := MinAttemptInterval - timeSinceLastAttempt
+			n.logger.Printf("[WEBHOOK] rate_limited webhook=%d delay=%s",
+				webhook.ID, delay.String())
+			retryAt := webhook.LastAttemptAt.Add(MinAttemptInterval)
+			return &RateLimitError{
+				Type:    "rate_limit",
+				Message: fmt.Sprintf("Rate limit active, can retry in %s", delay.String()),
+				RetryAt: &retryAt,
+			}
+		}
+	}
+
+	return nil
+}
+
+// shouldEnterCooldown determines if a webhook should enter cooldown based on recent failures
+func (n *Notifier) shouldEnterCooldown(webhook storage.Webhook) bool {
+	// If we haven't reached the failure threshold, no cooldown
+	if webhook.FailureCount < FailureThreshold {
+		return false
+	}
+
+	// If we don't have a last error timestamp, enter cooldown as a safety measure
+	if webhook.LastErrorAt == nil {
+		return true
+	}
+
+	// Check if the failures occurred within the failure window
+	now := time.Now()
+	failureWindowStart := now.Add(-FailureWindow)
+	return webhook.LastErrorAt.After(failureWindowStart)
+}
+
+// RateLimitError represents an error due to rate limiting or cooldown
+type RateLimitError struct {
+	Type    string     // "cooldown" or "rate_limit"
+	Message string     // Human-readable error message
+	RetryAt *time.Time // When the operation can be retried
+}
+
+func (e *RateLimitError) Error() string {
+	return e.Message
 }

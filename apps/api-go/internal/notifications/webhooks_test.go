@@ -62,6 +62,10 @@ func (m *mockStore) MarkWebhookSuccess(ctx context.Context, id int, lastSuccessA
 	return nil
 }
 
+func (m *mockStore) UpdateWebhookDeliveryState(ctx context.Context, id int, lastAttemptAt time.Time, cooldownUntil *time.Time) error {
+	return nil
+}
+
 // Implement other required methods with no-ops for this test
 func (m *mockStore) CreateUser(ctx context.Context, email, passwordHash string) (*storage.User, error) {
 	return nil, fmt.Errorf("not implemented")

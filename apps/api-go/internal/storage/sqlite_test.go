@@ -1318,6 +1318,88 @@ func TestSQLiteStore_WebhookCascadeDelete(t *testing.T) {
 	}
 }
 
+func TestSQLiteStore_UpdateWebhookDeliveryState(t *testing.T) {
+	store, err := NewSQLiteStore("file::memory:?cache=shared")
+	if err != nil {
+		t.Fatalf("Failed to create test store: %v", err)
+	}
+	defer store.Close()
+
+	ctx := context.Background()
+
+	// Create a test user
+	user, err := store.CreateUser(ctx, "test@example.com", "password_hash")
+	if err != nil {
+		t.Fatalf("Failed to create test user: %v", err)
+	}
+
+	// Create a webhook
+	webhook, err := store.CreateWebhook(ctx, user.ID, "https://example.com/webhook", HashSecret("secret123"))
+	if err != nil {
+		t.Fatalf("Failed to create webhook: %v", err)
+	}
+
+	// Verify initial state
+	if webhook.LastAttemptAt != nil {
+		t.Error("Expected LastAttemptAt to be nil initially")
+	}
+	if webhook.CooldownUntil != nil {
+		t.Error("Expected CooldownUntil to be nil initially")
+	}
+
+	// Test updating with last attempt time only
+	lastAttemptTime := time.Now()
+	err = store.UpdateWebhookDeliveryState(ctx, webhook.ID, lastAttemptTime, nil)
+	if err != nil {
+		t.Fatalf("Failed to update webhook delivery state: %v", err)
+	}
+
+	// Verify last attempt time was set
+	updatedWebhook, err := store.GetWebhook(ctx, webhook.ID, user.ID)
+	if err != nil {
+		t.Fatalf("Failed to get updated webhook: %v", err)
+	}
+
+	if updatedWebhook.LastAttemptAt == nil {
+		t.Error("Expected LastAttemptAt to be set")
+	} else if !updatedWebhook.LastAttemptAt.Truncate(time.Second).Equal(lastAttemptTime.Truncate(time.Second)) {
+		t.Errorf("Expected LastAttemptAt %v, got %v", lastAttemptTime.Truncate(time.Second), updatedWebhook.LastAttemptAt.Truncate(time.Second))
+	}
+
+	if updatedWebhook.CooldownUntil != nil {
+		t.Error("Expected CooldownUntil to remain nil")
+	}
+
+	// Test updating with cooldown time
+	cooldownTime := time.Now().Add(15 * time.Minute)
+	newAttemptTime := time.Now().Add(1 * time.Minute)
+	err = store.UpdateWebhookDeliveryState(ctx, webhook.ID, newAttemptTime, &cooldownTime)
+	if err != nil {
+		t.Fatalf("Failed to update webhook delivery state with cooldown: %v", err)
+	}
+
+	// Verify cooldown time was set
+	updatedWebhook, err = store.GetWebhook(ctx, webhook.ID, user.ID)
+	if err != nil {
+		t.Fatalf("Failed to get updated webhook: %v", err)
+	}
+
+	if updatedWebhook.CooldownUntil == nil {
+		t.Error("Expected CooldownUntil to be set")
+	} else if !updatedWebhook.CooldownUntil.Truncate(time.Second).Equal(cooldownTime.Truncate(time.Second)) {
+		t.Errorf("Expected CooldownUntil %v, got %v", cooldownTime.Truncate(time.Second), updatedWebhook.CooldownUntil.Truncate(time.Second))
+	}
+
+	// Test updating non-existent webhook
+	err = store.UpdateWebhookDeliveryState(ctx, 99999, time.Now(), nil)
+	if err == nil {
+		t.Error("Expected error when updating non-existent webhook")
+	}
+	if err.Error() != "webhook with id 99999 not found" {
+		t.Errorf("Expected specific error message, got: %v", err)
+	}
+}
+
 func TestHashSecret(t *testing.T) {
 	secret := "my-secret-key"
 	hash1 := HashSecret(secret)

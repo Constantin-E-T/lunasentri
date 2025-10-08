@@ -3,6 +3,7 @@ package notifications
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"net/url"
@@ -29,6 +30,8 @@ type WebhookResponse struct {
 	FailureCount   int        `json:"failure_count"`
 	LastSuccessAt  *time.Time `json:"last_success_at"`
 	LastErrorAt    *time.Time `json:"last_error_at"`
+	CooldownUntil  *time.Time `json:"cooldown_until"`
+	LastAttemptAt  *time.Time `json:"last_attempt_at"`
 	CreatedAt      time.Time  `json:"created_at"`
 	UpdatedAt      time.Time  `json:"updated_at"`
 	SecretLastFour string     `json:"secret_last_four"`
@@ -83,6 +86,8 @@ func webhookToResponse(webhook storage.Webhook, secretLastFour string) WebhookRe
 		FailureCount:   webhook.FailureCount,
 		LastSuccessAt:  webhook.LastSuccessAt,
 		LastErrorAt:    webhook.LastErrorAt,
+		CooldownUntil:  webhook.CooldownUntil,
+		LastAttemptAt:  webhook.LastAttemptAt,
 		CreatedAt:      webhook.CreatedAt,
 		UpdatedAt:      webhook.UpdatedAt,
 		SecretLastFour: secretLastFour,
@@ -423,6 +428,15 @@ func HandleTestWebhook(notifier AlertNotifier, store storage.Store) http.Handler
 
 		// Send test notification
 		if err := notifier.SendTest(ctx, *webhook); err != nil {
+			// Check if it's a rate limit error
+			var rateLimitErr *RateLimitError
+			if errors.As(err, &rateLimitErr) {
+				w.Header().Set("Content-Type", "application/json")
+				w.WriteHeader(http.StatusTooManyRequests)
+				json.NewEncoder(w).Encode(map[string]string{"error": rateLimitErr.Message})
+				return
+			}
+
 			w.Header().Set("Content-Type", "application/json")
 			w.WriteHeader(http.StatusBadGateway)
 			json.NewEncoder(w).Encode(map[string]string{"error": fmt.Sprintf("Failed to send test webhook: %v", err)})

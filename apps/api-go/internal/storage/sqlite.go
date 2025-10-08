@@ -144,6 +144,14 @@ func (s *SQLiteStore) migrate() error {
             CREATE INDEX IF NOT EXISTS idx_webhooks_active ON webhooks(is_active);
             `,
 		},
+		{
+			version: "007_webhook_rate_limiting",
+			sql: `
+            ALTER TABLE webhooks ADD COLUMN cooldown_until DATETIME;
+            ALTER TABLE webhooks ADD COLUMN last_attempt_at DATETIME;
+            CREATE INDEX IF NOT EXISTS idx_webhooks_cooldown ON webhooks(cooldown_until);
+            `,
+		},
 	}
 
 	// Apply each migration if not already applied
@@ -646,7 +654,7 @@ func (s *SQLiteStore) AckAlertEvent(ctx context.Context, id int) error {
 // ListWebhooks returns all webhooks for a specific user
 func (s *SQLiteStore) ListWebhooks(ctx context.Context, userID int) ([]Webhook, error) {
 	query := `SELECT id, user_id, url, secret_hash, is_active, failure_count, 
-              last_success_at, last_error_at, created_at, updated_at
+              last_success_at, last_error_at, cooldown_until, last_attempt_at, created_at, updated_at
               FROM webhooks WHERE user_id = ?
               ORDER BY created_at ASC`
 
@@ -660,7 +668,7 @@ func (s *SQLiteStore) ListWebhooks(ctx context.Context, userID int) ([]Webhook, 
 	for rows.Next() {
 		var w Webhook
 		err := rows.Scan(&w.ID, &w.UserID, &w.URL, &w.SecretHash, &w.IsActive,
-			&w.FailureCount, &w.LastSuccessAt, &w.LastErrorAt,
+			&w.FailureCount, &w.LastSuccessAt, &w.LastErrorAt, &w.CooldownUntil, &w.LastAttemptAt,
 			&w.CreatedAt, &w.UpdatedAt)
 		if err != nil {
 			return nil, fmt.Errorf("failed to scan webhook: %w", err)
@@ -678,14 +686,14 @@ func (s *SQLiteStore) ListWebhooks(ctx context.Context, userID int) ([]Webhook, 
 // GetWebhook retrieves a single webhook by ID for a specific user
 func (s *SQLiteStore) GetWebhook(ctx context.Context, id int, userID int) (*Webhook, error) {
 	query := `SELECT id, user_id, url, secret_hash, is_active, failure_count,
-              last_success_at, last_error_at, created_at, updated_at
+              last_success_at, last_error_at, cooldown_until, last_attempt_at, created_at, updated_at
               FROM webhooks WHERE id = ? AND user_id = ?`
 
 	webhook := &Webhook{}
 	err := s.db.QueryRowContext(ctx, query, id, userID).Scan(
 		&webhook.ID, &webhook.UserID, &webhook.URL, &webhook.SecretHash,
 		&webhook.IsActive, &webhook.FailureCount, &webhook.LastSuccessAt,
-		&webhook.LastErrorAt, &webhook.CreatedAt, &webhook.UpdatedAt)
+		&webhook.LastErrorAt, &webhook.CooldownUntil, &webhook.LastAttemptAt, &webhook.CreatedAt, &webhook.UpdatedAt)
 
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
@@ -704,13 +712,13 @@ func (s *SQLiteStore) CreateWebhook(ctx context.Context, userID int, url, secret
               created_at, updated_at)
               VALUES (?, ?, ?, 1, 0, ?, ?)
               RETURNING id, user_id, url, secret_hash, is_active, failure_count,
-              last_success_at, last_error_at, created_at, updated_at`
+              last_success_at, last_error_at, cooldown_until, last_attempt_at, created_at, updated_at`
 
 	webhook := &Webhook{}
 	err := s.db.QueryRowContext(ctx, query, userID, url, secretHash, now, now).Scan(
 		&webhook.ID, &webhook.UserID, &webhook.URL, &webhook.SecretHash,
 		&webhook.IsActive, &webhook.FailureCount, &webhook.LastSuccessAt,
-		&webhook.LastErrorAt, &webhook.CreatedAt, &webhook.UpdatedAt)
+		&webhook.LastErrorAt, &webhook.CooldownUntil, &webhook.LastAttemptAt, &webhook.CreatedAt, &webhook.UpdatedAt)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create webhook: %w", err)
 	}
@@ -760,14 +768,14 @@ func (s *SQLiteStore) UpdateWebhook(ctx context.Context, id int, userID int, url
 
 	// Return updated webhook
 	selectQuery := `SELECT id, user_id, url, secret_hash, is_active, failure_count,
-                    last_success_at, last_error_at, created_at, updated_at
+                    last_success_at, last_error_at, cooldown_until, last_attempt_at, created_at, updated_at
                     FROM webhooks WHERE id = ? AND user_id = ?`
 
 	webhook := &Webhook{}
 	err = s.db.QueryRowContext(ctx, selectQuery, id, userID).Scan(
 		&webhook.ID, &webhook.UserID, &webhook.URL, &webhook.SecretHash,
 		&webhook.IsActive, &webhook.FailureCount, &webhook.LastSuccessAt,
-		&webhook.LastErrorAt, &webhook.CreatedAt, &webhook.UpdatedAt)
+		&webhook.LastErrorAt, &webhook.CooldownUntil, &webhook.LastAttemptAt, &webhook.CreatedAt, &webhook.UpdatedAt)
 	if err != nil {
 		return nil, fmt.Errorf("failed to fetch updated webhook: %w", err)
 	}
@@ -831,6 +839,28 @@ func (s *SQLiteStore) MarkWebhookSuccess(ctx context.Context, id int, lastSucces
 	rows, err := res.RowsAffected()
 	if err != nil {
 		return fmt.Errorf("failed to verify success update: %w", err)
+	}
+	if rows == 0 {
+		return fmt.Errorf("webhook with id %d not found", id)
+	}
+
+	return nil
+}
+
+// UpdateWebhookDeliveryState updates the webhook's last attempt and cooldown state for rate limiting
+func (s *SQLiteStore) UpdateWebhookDeliveryState(ctx context.Context, id int, lastAttemptAt time.Time, cooldownUntil *time.Time) error {
+	query := `UPDATE webhooks 
+              SET last_attempt_at = ?, cooldown_until = ?, updated_at = ?
+              WHERE id = ?`
+
+	res, err := s.db.ExecContext(ctx, query, lastAttemptAt, cooldownUntil, time.Now(), id)
+	if err != nil {
+		return fmt.Errorf("failed to update webhook delivery state: %w", err)
+	}
+
+	rows, err := res.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("failed to verify delivery state update: %w", err)
 	}
 	if rows == 0 {
 		return fmt.Errorf("webhook with id %d not found", id)

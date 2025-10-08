@@ -27,6 +27,7 @@ All webhook endpoints require authentication and are user-scoped:
 
 - Returns list of current user's webhooks
 - Response includes safe fields (id, url, is_active, failure tracking, secret_last_four)
+- **NEW**: Includes `cooldown_until` and `last_attempt_at` for rate limiting visibility
 - Secret hashes are never exposed
 
 **POST `/notifications/webhooks`**

@@ -225,6 +225,10 @@ func (m *mockStore) MarkWebhookSuccess(ctx context.Context, webhookID int, lastS
 	return nil
 }
 
+func (m *mockStore) UpdateWebhookDeliveryState(ctx context.Context, id int, lastAttemptAt time.Time, cooldownUntil *time.Time) error {
+	return nil
+}
+
 func (m *mockStore) Close() error {
 	return nil
 }
