@@ -229,6 +229,38 @@ func (m *mockStore) UpdateWebhookDeliveryState(ctx context.Context, id int, last
 	return nil
 }
 
+func (m *mockStore) ListEmailRecipients(ctx context.Context, userID int) ([]storage.EmailRecipient, error) {
+	return []storage.EmailRecipient{}, nil
+}
+
+func (m *mockStore) GetEmailRecipient(ctx context.Context, id int, userID int) (*storage.EmailRecipient, error) {
+	return &storage.EmailRecipient{ID: id, UserID: userID, Email: "test@example.com", IsActive: true}, nil
+}
+
+func (m *mockStore) CreateEmailRecipient(ctx context.Context, userID int, email string) (*storage.EmailRecipient, error) {
+	return &storage.EmailRecipient{ID: 1, UserID: userID, Email: email, IsActive: true}, nil
+}
+
+func (m *mockStore) UpdateEmailRecipient(ctx context.Context, id int, userID int, email string, isActive *bool) (*storage.EmailRecipient, error) {
+	return &storage.EmailRecipient{ID: id, UserID: userID, Email: email, IsActive: true}, nil
+}
+
+func (m *mockStore) DeleteEmailRecipient(ctx context.Context, id int, userID int) error {
+	return nil
+}
+
+func (m *mockStore) IncrementEmailFailure(ctx context.Context, id int, lastErrorAt time.Time) error {
+	return nil
+}
+
+func (m *mockStore) MarkEmailSuccess(ctx context.Context, id int, lastSuccessAt time.Time) error {
+	return nil
+}
+
+func (m *mockStore) UpdateEmailDeliveryState(ctx context.Context, id int, lastAttemptAt time.Time, cooldownUntil *time.Time) error {
+	return nil
+}
+
 func (m *mockStore) Close() error {
 	return nil
 }

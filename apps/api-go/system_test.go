@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"log"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -13,6 +14,7 @@ import (
 	"github.com/Constantin-E-T/lunasentri/apps/api-go/internal/alerts"
 	"github.com/Constantin-E-T/lunasentri/apps/api-go/internal/auth"
 	"github.com/Constantin-E-T/lunasentri/apps/api-go/internal/metrics"
+	"github.com/Constantin-E-T/lunasentri/apps/api-go/internal/notifications"
 	"github.com/Constantin-E-T/lunasentri/apps/api-go/internal/storage"
 	"github.com/Constantin-E-T/lunasentri/apps/api-go/internal/system"
 )
@@ -73,23 +75,8 @@ func createTestAlertService(t *testing.T) *alerts.Service {
 	}
 
 	// Create a no-op notifier for testing
-	notifier := &noOpNotifier{}
+	notifier := notifications.NewNotifier(store, log.Default())
 	return alerts.NewService(store, notifier)
-}
-
-// noOpNotifier is a test implementation that does nothing
-type noOpNotifier struct{}
-
-func (n *noOpNotifier) Send(ctx context.Context, rule storage.AlertRule, event storage.AlertEvent) error {
-	return nil
-}
-
-func (n *noOpNotifier) Notify(ctx context.Context, rule storage.AlertRule, event *storage.AlertEvent) error {
-	return nil
-}
-
-func (n *noOpNotifier) SendTest(ctx context.Context, webhook storage.Webhook) error {
-	return nil
 }
 
 func TestSystemInfoHandler(t *testing.T) {
@@ -115,14 +102,14 @@ func TestSystemInfoHandler(t *testing.T) {
 	store := createTestStore(t)
 	authService := createTestAuthService(t)
 	alertService := createTestAlertService(t)
-	notifier := &noOpNotifier{}
+	notifier := notifications.NewNotifier(store, log.Default())
 	collector := &fakeCollector{
 		metricsToReturn: metrics.Metrics{},
 		errToReturn:     nil,
 	}
 
 	// Create server
-	mux := newServer(collector, time.Now(), authService, alertService, systemService, store, notifier, 15*time.Minute, 15*time.Minute, false)
+	mux := newServer(collector, time.Now(), authService, alertService, systemService, store, notifier, nil, 15*time.Minute, 15*time.Minute, false)
 	server := httptest.NewServer(corsMiddleware(mux))
 	defer server.Close()
 
@@ -178,14 +165,14 @@ func TestSystemInfoHandlerError(t *testing.T) {
 	store := createTestStore(t)
 	authService := createTestAuthService(t)
 	alertService := createTestAlertService(t)
-	notifier := &noOpNotifier{}
+	notifier := notifications.NewNotifier(store, log.Default())
 	collector := &fakeCollector{
 		metricsToReturn: metrics.Metrics{},
 		errToReturn:     nil,
 	}
 
 	// Create server
-	mux := newServer(collector, time.Now(), authService, alertService, systemService, store, notifier, 15*time.Minute, 15*time.Minute, false)
+	mux := newServer(collector, time.Now(), authService, alertService, systemService, store, notifier, nil, 15*time.Minute, 15*time.Minute, false)
 	server := httptest.NewServer(corsMiddleware(mux))
 	defer server.Close()
 
@@ -215,14 +202,14 @@ func TestSystemInfoHandlerMethodNotAllowed(t *testing.T) {
 	store := createTestStore(t)
 	authService := createTestAuthService(t)
 	alertService := createTestAlertService(t)
-	notifier := &noOpNotifier{}
+	notifier := notifications.NewNotifier(store, log.Default())
 	collector := &fakeCollector{
 		metricsToReturn: metrics.Metrics{},
 		errToReturn:     nil,
 	}
 
 	// Create server
-	mux := newServer(collector, time.Now(), authService, alertService, systemService, store, notifier, 15*time.Minute, 15*time.Minute, false)
+	mux := newServer(collector, time.Now(), authService, alertService, systemService, store, notifier, nil, 15*time.Minute, 15*time.Minute, false)
 	server := httptest.NewServer(corsMiddleware(mux))
 	defer server.Close()
 

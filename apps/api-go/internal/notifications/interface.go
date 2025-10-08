@@ -10,6 +10,10 @@ import (
 type AlertNotifier interface {
 	// Notify sends notifications for an alert event
 	Notify(ctx context.Context, rule storage.AlertRule, event *storage.AlertEvent) error
+}
+
+// WebhookTester defines the interface for testing webhook delivery
+type WebhookTester interface {
 	// SendTest sends a test notification to a webhook
 	SendTest(ctx context.Context, webhook storage.Webhook) error
 }

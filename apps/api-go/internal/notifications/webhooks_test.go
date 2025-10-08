@@ -133,6 +133,30 @@ func (m *mockStore) UpdateWebhook(ctx context.Context, id int, userID int, url s
 func (m *mockStore) DeleteWebhook(ctx context.Context, id int, userID int) error {
 	return fmt.Errorf("not implemented")
 }
+func (m *mockStore) ListEmailRecipients(ctx context.Context, userID int) ([]storage.EmailRecipient, error) {
+	return nil, fmt.Errorf("not implemented")
+}
+func (m *mockStore) GetEmailRecipient(ctx context.Context, id int, userID int) (*storage.EmailRecipient, error) {
+	return nil, fmt.Errorf("not implemented")
+}
+func (m *mockStore) CreateEmailRecipient(ctx context.Context, userID int, email string) (*storage.EmailRecipient, error) {
+	return nil, fmt.Errorf("not implemented")
+}
+func (m *mockStore) UpdateEmailRecipient(ctx context.Context, id int, userID int, email string, isActive *bool) (*storage.EmailRecipient, error) {
+	return nil, fmt.Errorf("not implemented")
+}
+func (m *mockStore) DeleteEmailRecipient(ctx context.Context, id int, userID int) error {
+	return fmt.Errorf("not implemented")
+}
+func (m *mockStore) IncrementEmailFailure(ctx context.Context, id int, lastErrorAt time.Time) error {
+	return fmt.Errorf("not implemented")
+}
+func (m *mockStore) MarkEmailSuccess(ctx context.Context, id int, lastSuccessAt time.Time) error {
+	return fmt.Errorf("not implemented")
+}
+func (m *mockStore) UpdateEmailDeliveryState(ctx context.Context, id int, lastAttemptAt time.Time, cooldownUntil *time.Time) error {
+	return fmt.Errorf("not implemented")
+}
 func (m *mockStore) Close() error {
 	return nil
 }

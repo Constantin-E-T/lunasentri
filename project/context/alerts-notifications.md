@@ -233,3 +233,158 @@ The webhook management UI has been fully implemented in the Settings page:
   - Error and auth expiry cases
 - ✅ All existing tests continue to pass (22 tests total)
 - ✅ Build verification successful with Turbopack
+
+---
+
+## Email Notification Channel
+
+**TL;DR** – Email notifications delivered via Microsoft 365 using Microsoft Graph API.
+
+**Implementation Complete** ✅
+
+- ✅ **Configuration**: Environment-based M365 credentials with validation
+- ✅ **Authentication**: OAuth2 client credentials flow with token caching
+- ✅ **Email Delivery**: HTML emails via Microsoft Graph API
+- ✅ **Storage**: User-scoped email recipients table with rate limiting
+- ✅ **HTTP API**: Full CRUD endpoints for email recipient management
+- ✅ **Fan-out**: Composite notifier sends to both webhooks and emails
+- ✅ **Testing**: Comprehensive test coverage for all components
+
+**Environment Variables**
+
+Required when `EMAIL_PROVIDER=m365`:
+
+```bash
+EMAIL_PROVIDER=m365
+M365_TENANT_ID=<your-tenant-id>
+M365_CLIENT_ID=<your-client-id>
+M365_CLIENT_SECRET=<your-client-secret>
+M365_SENDER=alerts@example.com
+```
+
+**Email Recipients API Endpoints**
+
+All email endpoints require authentication and are user-scoped:
+
+**GET `/notifications/emails`**
+
+- Returns list of current user's email recipients
+- Response includes cooldown, rate limiting, and failure tracking
+
+**POST `/notifications/emails`**
+
+```json
+{
+  "email": "user@example.com",
+  "is_active": true
+}
+```
+
+- Creates new email recipient with validation
+- Requires valid email format (must contain @)
+- Auto-sets active state and initializes tracking
+
+**PUT `/notifications/emails/{id}`**
+
+```json
+{
+  "email": "updated@example.com",
+  "is_active": false
+}
+```
+
+- Updates existing email recipient (user ownership verified)
+- All fields optional - omitted fields remain unchanged
+
+**DELETE `/notifications/emails/{id}`**
+
+- Removes email recipient after verifying user ownership
+- Returns 204 No Content on success
+
+**POST `/notifications/emails/{id}/test`**
+
+- Sends test email to verify configuration
+- Respects same rate limiting and cooldown as alerts
+- Returns 429 if in cooldown or rate limited
+
+**Email Response Format**
+
+```json
+{
+  "id": 1,
+  "email": "user@example.com",
+  "is_active": true,
+  "failure_count": 0,
+  "last_success_at": "2025-10-08T12:00:00Z",
+  "last_error_at": null,
+  "cooldown_until": null,
+  "last_attempt_at": "2025-10-08T12:00:00Z",
+  "created_at": "2025-10-08T11:00:00Z",
+  "updated_at": "2025-10-08T12:00:00Z"
+}
+```
+
+**Email Delivery Behavior**
+
+- **Immediate**: First attempt on alert trigger
+- **Retry Logic**: Up to 3 attempts with exponential backoff (1s, 2s, 4s)
+- **Success Criteria**: HTTP 2xx response from Microsoft Graph
+- **Failure Tracking**: Increments failure count and records last error time
+- **Logging**: Structured logs with recipient ID and email (never full bodies)
+- **Rate Limiting**: 30-second minimum interval between attempts (shared with webhooks)
+- **Circuit Breaker**: 15-minute cooldown after 3 failures within 10 minutes (shared with webhooks)
+
+**Email Content**
+
+Alert emails are HTML-formatted with:
+
+- Alert rule name and metric
+- Condition (above/below threshold)
+- Current value vs threshold
+- Trigger timestamp
+- Number of consecutive breaches required
+
+Test emails include a simple confirmation message.
+
+**Example curl commands**
+
+```bash
+# List email recipients
+curl -X GET http://localhost:8080/notifications/emails \
+  -H "Cookie: lunasentri_session=..."
+
+# Create email recipient
+curl -X POST http://localhost:8080/notifications/emails \
+  -H "Content-Type: application/json" \
+  -H "Cookie: lunasentri_session=..." \
+  -d '{"email":"alerts@example.com"}'
+
+# Update email recipient
+curl -X PUT http://localhost:8080/notifications/emails/1 \
+  -H "Content-Type: application/json" \
+  -H "Cookie: lunasentri_session=..." \
+  -d '{"is_active":false}'
+
+# Delete email recipient
+curl -X DELETE http://localhost:8080/notifications/emails/1 \
+  -H "Cookie: lunasentri_session=..."
+
+# Send test email
+curl -X POST http://localhost:8080/notifications/emails/1/test \
+  -H "Cookie: lunasentri_session=..."
+```
+
+**Security**
+
+- HTTPS-only communication with Microsoft Graph API
+- OAuth2 access tokens cached with 5-minute expiry buffer
+- Client credentials never logged or exposed in responses
+- Email addresses visible only to owning user
+- Same rate limiting protection as webhooks
+
+**Next Steps**
+
+- [ ] Frontend: build email recipient settings UI to list/add/edit/delete recipients and trigger test emails
+- [ ] Enhanced templates: support custom email templates or richer HTML formatting
+- [ ] Additional providers: add support for SendGrid, Mailgun, or SMTP
+- [ ] Digest mode: batch multiple alerts into a single email to reduce noise

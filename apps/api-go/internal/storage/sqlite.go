@@ -152,6 +152,29 @@ func (s *SQLiteStore) migrate() error {
             CREATE INDEX IF NOT EXISTS idx_webhooks_cooldown ON webhooks(cooldown_until);
             `,
 		},
+		{
+			version: "008_email_recipients",
+			sql: `
+            CREATE TABLE IF NOT EXISTS email_recipients (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id INTEGER NOT NULL,
+                email TEXT NOT NULL,
+                is_active BOOLEAN DEFAULT 1 NOT NULL,
+                failure_count INTEGER DEFAULT 0 NOT NULL,
+                last_success_at DATETIME,
+                last_error_at DATETIME,
+                cooldown_until DATETIME,
+                last_attempt_at DATETIME,
+                created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE,
+                UNIQUE(user_id, email)
+            );
+            CREATE INDEX IF NOT EXISTS idx_email_recipients_user_id ON email_recipients(user_id);
+            CREATE INDEX IF NOT EXISTS idx_email_recipients_active ON email_recipients(is_active);
+            CREATE INDEX IF NOT EXISTS idx_email_recipients_cooldown ON email_recipients(cooldown_until);
+            `,
+		},
 	}
 
 	// Apply each migration if not already applied
@@ -864,6 +887,208 @@ func (s *SQLiteStore) UpdateWebhookDeliveryState(ctx context.Context, id int, la
 	}
 	if rows == 0 {
 		return fmt.Errorf("webhook with id %d not found", id)
+	}
+
+	return nil
+}
+
+// ListEmailRecipients returns all email recipients for a user
+func (s *SQLiteStore) ListEmailRecipients(ctx context.Context, userID int) ([]EmailRecipient, error) {
+	query := `SELECT id, user_id, email, is_active, failure_count, last_success_at, 
+                     last_error_at, cooldown_until, last_attempt_at, created_at, updated_at
+              FROM email_recipients
+              WHERE user_id = ?
+              ORDER BY created_at DESC`
+
+	rows, err := s.db.QueryContext(ctx, query, userID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to query email recipients: %w", err)
+	}
+	defer rows.Close()
+
+	var recipients []EmailRecipient
+	for rows.Next() {
+		var r EmailRecipient
+		if err := rows.Scan(&r.ID, &r.UserID, &r.Email, &r.IsActive, &r.FailureCount,
+			&r.LastSuccessAt, &r.LastErrorAt, &r.CooldownUntil, &r.LastAttemptAt,
+			&r.CreatedAt, &r.UpdatedAt); err != nil {
+			return nil, fmt.Errorf("failed to scan email recipient: %w", err)
+		}
+		recipients = append(recipients, r)
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("error iterating email recipients: %w", err)
+	}
+
+	return recipients, nil
+}
+
+// GetEmailRecipient retrieves a single email recipient by ID and userID
+func (s *SQLiteStore) GetEmailRecipient(ctx context.Context, id int, userID int) (*EmailRecipient, error) {
+	query := `SELECT id, user_id, email, is_active, failure_count, last_success_at,
+                     last_error_at, cooldown_until, last_attempt_at, created_at, updated_at
+              FROM email_recipients
+              WHERE id = ? AND user_id = ?`
+
+	var r EmailRecipient
+	err := s.db.QueryRowContext(ctx, query, id, userID).Scan(
+		&r.ID, &r.UserID, &r.Email, &r.IsActive, &r.FailureCount,
+		&r.LastSuccessAt, &r.LastErrorAt, &r.CooldownUntil, &r.LastAttemptAt,
+		&r.CreatedAt, &r.UpdatedAt,
+	)
+
+	if err != nil {
+		return nil, fmt.Errorf("failed to get email recipient: %w", err)
+	}
+
+	return &r, nil
+}
+
+// CreateEmailRecipient creates a new email recipient
+func (s *SQLiteStore) CreateEmailRecipient(ctx context.Context, userID int, email string) (*EmailRecipient, error) {
+	query := `INSERT INTO email_recipients (user_id, email, is_active, failure_count)
+              VALUES (?, ?, 1, 0)`
+
+	result, err := s.db.ExecContext(ctx, query, userID, email)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create email recipient: %w", err)
+	}
+
+	id, err := result.LastInsertId()
+	if err != nil {
+		return nil, fmt.Errorf("failed to get email recipient ID: %w", err)
+	}
+
+	return s.GetEmailRecipient(ctx, int(id), userID)
+}
+
+// UpdateEmailRecipient updates an email recipient
+func (s *SQLiteStore) UpdateEmailRecipient(ctx context.Context, id int, userID int, email string, isActive *bool) (*EmailRecipient, error) {
+	// Build dynamic query based on provided fields
+	updates := []string{}
+	args := []interface{}{}
+
+	if email != "" {
+		updates = append(updates, "email = ?")
+		args = append(args, email)
+	}
+
+	if isActive != nil {
+		updates = append(updates, "is_active = ?")
+		args = append(args, *isActive)
+	}
+
+	if len(updates) == 0 {
+		return s.GetEmailRecipient(ctx, id, userID)
+	}
+
+	updates = append(updates, "updated_at = ?")
+	args = append(args, time.Now())
+
+	// Add WHERE clause parameters
+	args = append(args, id, userID)
+
+	query := fmt.Sprintf("UPDATE email_recipients SET %s WHERE id = ? AND user_id = ?",
+		strings.Join(updates, ", "))
+
+	res, err := s.db.ExecContext(ctx, query, args...)
+	if err != nil {
+		return nil, fmt.Errorf("failed to update email recipient: %w", err)
+	}
+
+	rows, err := res.RowsAffected()
+	if err != nil {
+		return nil, fmt.Errorf("failed to verify email recipient update: %w", err)
+	}
+	if rows == 0 {
+		return nil, fmt.Errorf("email recipient with id %d not found or unauthorized", id)
+	}
+
+	return s.GetEmailRecipient(ctx, id, userID)
+}
+
+// DeleteEmailRecipient deletes an email recipient
+func (s *SQLiteStore) DeleteEmailRecipient(ctx context.Context, id int, userID int) error {
+	query := `DELETE FROM email_recipients WHERE id = ? AND user_id = ?`
+
+	res, err := s.db.ExecContext(ctx, query, id, userID)
+	if err != nil {
+		return fmt.Errorf("failed to delete email recipient: %w", err)
+	}
+
+	rows, err := res.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("failed to verify email recipient deletion: %w", err)
+	}
+	if rows == 0 {
+		return fmt.Errorf("email recipient with id %d not found or unauthorized", id)
+	}
+
+	return nil
+}
+
+// IncrementEmailFailure increments the failure count for an email recipient
+func (s *SQLiteStore) IncrementEmailFailure(ctx context.Context, id int, lastErrorAt time.Time) error {
+	query := `UPDATE email_recipients
+              SET failure_count = failure_count + 1, last_error_at = ?, updated_at = ?
+              WHERE id = ?`
+
+	res, err := s.db.ExecContext(ctx, query, lastErrorAt, time.Now(), id)
+	if err != nil {
+		return fmt.Errorf("failed to increment email failure: %w", err)
+	}
+
+	rows, err := res.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("failed to verify failure increment: %w", err)
+	}
+	if rows == 0 {
+		return fmt.Errorf("email recipient with id %d not found", id)
+	}
+
+	return nil
+}
+
+// MarkEmailSuccess resets failure count and updates last success time
+func (s *SQLiteStore) MarkEmailSuccess(ctx context.Context, id int, lastSuccessAt time.Time) error {
+	query := `UPDATE email_recipients
+              SET failure_count = 0, last_success_at = ?, updated_at = ?
+              WHERE id = ?`
+
+	res, err := s.db.ExecContext(ctx, query, lastSuccessAt, time.Now(), id)
+	if err != nil {
+		return fmt.Errorf("failed to mark email success: %w", err)
+	}
+
+	rows, err := res.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("failed to verify success update: %w", err)
+	}
+	if rows == 0 {
+		return fmt.Errorf("email recipient with id %d not found", id)
+	}
+
+	return nil
+}
+
+// UpdateEmailDeliveryState updates the email recipient's last attempt and cooldown state for rate limiting
+func (s *SQLiteStore) UpdateEmailDeliveryState(ctx context.Context, id int, lastAttemptAt time.Time, cooldownUntil *time.Time) error {
+	query := `UPDATE email_recipients
+              SET last_attempt_at = ?, cooldown_until = ?, updated_at = ?
+              WHERE id = ?`
+
+	res, err := s.db.ExecContext(ctx, query, lastAttemptAt, cooldownUntil, time.Now(), id)
+	if err != nil {
+		return fmt.Errorf("failed to update email delivery state: %w", err)
+	}
+
+	rows, err := res.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("failed to verify delivery state update: %w", err)
+	}
+	if rows == 0 {
+		return fmt.Errorf("email recipient with id %d not found", id)
 	}
 
 	return nil

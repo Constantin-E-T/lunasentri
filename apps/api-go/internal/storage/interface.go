@@ -84,6 +84,16 @@ type Store interface {
 	MarkWebhookSuccess(ctx context.Context, id int, lastSuccessAt time.Time) error
 	UpdateWebhookDeliveryState(ctx context.Context, id int, lastAttemptAt time.Time, cooldownUntil *time.Time) error
 
+	// Email recipient methods
+	ListEmailRecipients(ctx context.Context, userID int) ([]EmailRecipient, error)
+	GetEmailRecipient(ctx context.Context, id int, userID int) (*EmailRecipient, error)
+	CreateEmailRecipient(ctx context.Context, userID int, email string) (*EmailRecipient, error)
+	UpdateEmailRecipient(ctx context.Context, id int, userID int, email string, isActive *bool) (*EmailRecipient, error)
+	DeleteEmailRecipient(ctx context.Context, id int, userID int) error
+	IncrementEmailFailure(ctx context.Context, id int, lastErrorAt time.Time) error
+	MarkEmailSuccess(ctx context.Context, id int, lastSuccessAt time.Time) error
+	UpdateEmailDeliveryState(ctx context.Context, id int, lastAttemptAt time.Time, cooldownUntil *time.Time) error
+
 	// Close closes the storage connection
 	Close() error
 }
@@ -126,6 +136,21 @@ type Webhook struct {
 	UserID        int        `json:"user_id"`
 	URL           string     `json:"url"`
 	SecretHash    string     `json:"secret_hash"` // SHA-256 hex hash of user-provided secret
+	IsActive      bool       `json:"is_active"`
+	FailureCount  int        `json:"failure_count"`
+	LastSuccessAt *time.Time `json:"last_success_at"`
+	LastErrorAt   *time.Time `json:"last_error_at"`
+	CooldownUntil *time.Time `json:"cooldown_until"`  // Circuit breaker cooldown end time
+	LastAttemptAt *time.Time `json:"last_attempt_at"` // Last delivery attempt for rate limiting
+	CreatedAt     time.Time  `json:"created_at"`
+	UpdatedAt     time.Time  `json:"updated_at"`
+}
+
+// EmailRecipient represents an email notification recipient for alert notifications
+type EmailRecipient struct {
+	ID            int        `json:"id"`
+	UserID        int        `json:"user_id"`
+	Email         string     `json:"email"`
 	IsActive      bool       `json:"is_active"`
 	FailureCount  int        `json:"failure_count"`
 	LastSuccessAt *time.Time `json:"last_success_at"`
