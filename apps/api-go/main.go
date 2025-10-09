@@ -15,7 +15,6 @@ import (
 
 	"github.com/Constantin-E-T/lunasentri/apps/api-go/internal/alerts"
 	"github.com/Constantin-E-T/lunasentri/apps/api-go/internal/auth"
-	"github.com/Constantin-E-T/lunasentri/apps/api-go/internal/config"
 	"github.com/Constantin-E-T/lunasentri/apps/api-go/internal/metrics"
 	"github.com/Constantin-E-T/lunasentri/apps/api-go/internal/notifications"
 	"github.com/Constantin-E-T/lunasentri/apps/api-go/internal/storage"
@@ -642,7 +641,7 @@ func handleSystemInfo(systemService system.Service) http.HandlerFunc {
 }
 
 // newServer creates a new HTTP server with the given collector, auth service, alert service, and system service
-func newServer(collector metrics.Collector, startTime time.Time, authService *auth.Service, alertService *alerts.Service, systemService system.Service, store storage.Store, webhookNotifier *notifications.Notifier, emailNotifier *notifications.EmailNotifier, accessTTL time.Duration, passwordResetTTL time.Duration, secureCookie bool) *http.ServeMux {
+func newServer(collector metrics.Collector, startTime time.Time, authService *auth.Service, alertService *alerts.Service, systemService system.Service, store storage.Store, webhookNotifier *notifications.Notifier, accessTTL time.Duration, passwordResetTTL time.Duration, secureCookie bool) *http.ServeMux {
 	// Create a new ServeMux
 	mux := http.NewServeMux()
 
@@ -745,34 +744,6 @@ func newServer(collector metrics.Collector, startTime time.Time, authService *au
 			http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
 		}
 	})))
-
-	// Email notification endpoints (protected)
-	if emailNotifier != nil {
-		mux.Handle("/notifications/emails", authService.RequireAuth(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			if r.Method == http.MethodGet {
-				notifications.HandleListEmailRecipients(store)(w, r)
-			} else if r.Method == http.MethodPost {
-				notifications.HandleCreateEmailRecipient(store)(w, r)
-			} else {
-				http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
-			}
-		})))
-		mux.Handle("/notifications/emails/", authService.RequireAuth(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			// Check if this is a test email request
-			if strings.HasSuffix(r.URL.Path, "/test") && r.Method == http.MethodPost {
-				notifications.HandleTestEmail(store, emailNotifier)(w, r)
-				return
-			}
-
-			if r.Method == http.MethodPut {
-				notifications.HandleUpdateEmailRecipient(store)(w, r)
-			} else if r.Method == http.MethodDelete {
-				notifications.HandleDeleteEmailRecipient(store)(w, r)
-			} else {
-				http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
-			}
-		})))
-	}
 
 	return mux
 }
@@ -1102,34 +1073,17 @@ func main() {
 	// Initialize system service
 	systemService := system.NewSystemService()
 
-	// Load email configuration
-	emailConfig, err := config.LoadEmailConfig()
-	if err != nil {
-		log.Fatalf("Failed to load email config: %v", err)
-	}
-	if emailConfig.IsEnabled() {
-		log.Printf("Email notifications enabled with provider: %s", emailConfig.Provider)
-	} else {
-		log.Println("Email notifications disabled")
-	}
-
 	// Initialize webhook notifier
 	webhookNotifier := notifications.NewNotifier(store, log.Default())
 
-	// Initialize email notifier
-	var emailNotifier *notifications.EmailNotifier
-	if emailConfig.IsEnabled() {
-		emailNotifier = notifications.NewEmailNotifier(store, emailConfig, log.Default())
-	}
-
 	// Create composite notifier that fans out to all channels
-	compositeNotifier := notifications.NewCompositeNotifier(log.Default(), webhookNotifier, emailNotifier)
+	compositeNotifier := notifications.NewCompositeNotifier(log.Default(), webhookNotifier)
 
 	// Initialize alert service with composite notifier
 	alertService := alerts.NewService(store, compositeNotifier)
 
 	// Create server with real collector, auth service, alert service, and system service
-	mux := newServer(metricsCollector, serverStartTime, authService, alertService, systemService, store, webhookNotifier, emailNotifier, accessTTL, passwordResetTTL, secureCookie)
+	mux := newServer(metricsCollector, serverStartTime, authService, alertService, systemService, store, webhookNotifier, accessTTL, passwordResetTTL, secureCookie)
 
 	// Create HTTP server with CORS middleware
 	port := "8080"
