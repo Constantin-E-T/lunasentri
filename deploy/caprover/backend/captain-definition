@@ -1,4 +1,5 @@
 {
     "schemaVersion": 2,
-    "dockerfilePath": "./apps/api-go/Dockerfile"
+    "dockerfilePath": "./apps/api-go/Dockerfile",
+    "dockerfileContext": "./apps/api-go"
 }
