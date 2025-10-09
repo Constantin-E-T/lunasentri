@@ -58,8 +58,9 @@ deploy_frontend() {
     # Create temporary directory
     TEMP_DIR=$(mktemp -d)
 
-    # Copy all frontend files to temp directory root
-    cp -r apps/web-next/* "$TEMP_DIR/"
+    # Copy only necessary frontend files (exclude node_modules, .next, etc.)
+    rsync -av --exclude='node_modules' --exclude='.next' --exclude='.turbo' --exclude='coverage' apps/web-next/ "$TEMP_DIR/"
+
     # Copy pnpm-lock.yaml from monorepo root
     cp pnpm-lock.yaml "$TEMP_DIR/"
     cp deploy/caprover/frontend/captain-definition "$TEMP_DIR/"
