@@ -100,12 +100,6 @@ export default function Home() {
             >
               Settings
             </Link>
-            <Link
-              href="/notifications/telegram"
-              className="rounded-full bg-card/40 border border-border/30 px-4 py-2 text-muted-foreground transition-all duration-200 hover:text-foreground hover:border-border"
-            >
-              Telegram Alerts
-            </Link>
             <span className="text-muted-foreground hidden sm:inline">
               {user?.email}
             </span>

@@ -7,6 +7,18 @@ FRONTEND_DIR="$ROOT_DIR/apps/web-next"
 DB_FILE="$BACKEND_DIR/data/lunasentri.db"
 FRONTEND_PORT="${FRONTEND_PORT:-3000}"
 API_URL="${NEXT_PUBLIC_API_URL:-http://localhost:8080}"
+BACKEND_PORT="8080"
+
+# Parse command line arguments
+RESET_DB=false
+for arg in "$@"; do
+  case $arg in
+    --reset-db)
+      RESET_DB=true
+      shift
+      ;;
+  esac
+done
 
 # Load .env file if it exists
 if [ -f "$ROOT_DIR/.env" ]; then
@@ -18,15 +30,39 @@ command -v go >/dev/null 2>&1 || { echo "go is required"; exit 1; }
 command -v pnpm >/dev/null 2>&1 || { echo "pnpm is required"; exit 1; }
 command -v python3 >/dev/null 2>&1 || command -v openssl >/dev/null 2>&1 || { echo "python3 or openssl is required"; exit 1; }
 
+# Kill existing processes by name
 kill_existing() {
   pkill -f "go run main.go" >/dev/null 2>&1 || true
   pkill -f "next dev" >/dev/null 2>&1 || true
 }
 
-kill_existing
+# Kill processes on specific ports
+kill_port() {
+  local port=$1
+  echo "Checking for processes on port $port..."
+  if lsof -ti:$port >/dev/null 2>&1; then
+    echo "Killing processes on port $port..."
+    lsof -ti:$port | xargs kill -9 2>/dev/null || true
+    sleep 1
+  fi
+}
 
-rm -f "$DB_FILE"
-echo "Database reset: $DB_FILE"
+# Clean up existing processes and ports
+kill_existing
+kill_port $BACKEND_PORT
+kill_port $FRONTEND_PORT
+
+# Handle database reset
+if [ "$RESET_DB" = true ]; then
+  rm -f "$DB_FILE"
+  echo "Database reset: $DB_FILE"
+else
+  if [ -f "$DB_FILE" ]; then
+    echo "Database preserved: $DB_FILE"
+  else
+    echo "Database will be created: $DB_FILE"
+  fi
+fi
 
 generate_secret() {
   if command -v python3 >/dev/null 2>&1; then
@@ -44,29 +80,58 @@ export NEXT_PUBLIC_API_URL="$API_URL"
 echo "Starting backend on 8080..."
 (
   cd "$BACKEND_DIR"
+  
+  # Ensure data directory exists
+  mkdir -p data
+  
   AUTH_JWT_SECRET="$AUTH_JWT_SECRET_VALUE" \
   SECURE_COOKIE=false \
   CORS_ALLOWED_ORIGIN="$CORS_ORIGIN" \
   TELEGRAM_BOT_TOKEN="${TELEGRAM_BOT_TOKEN:-}" \
-  go run main.go
+  go run main.go 2>&1 | tee "$BACKEND_DIR/project/logs/backend.log"
 ) &
 BACKEND_PID=$!
 
-sleep 2
+sleep 3
+
+# Check if backend started successfully
+if ! kill -0 $BACKEND_PID 2>/dev/null; then
+  echo "❌ Backend failed to start. Check logs at: $BACKEND_DIR/project/logs/backend.log"
+  exit 1
+fi
+
+# Verify backend is responding
+if ! curl -s http://localhost:8080/health >/dev/null 2>&1; then
+  echo "⚠️  Backend started but /health endpoint not responding yet..."
+fi
 
 echo "Starting frontend on $FRONTEND_PORT..."
 (
   cd "$FRONTEND_DIR"
-  pnpm install >/dev/null
-  pnpm dev --port "$FRONTEND_PORT"
+  pnpm install >/dev/null 2>&1
+  pnpm dev --port "$FRONTEND_PORT" 2>&1 | tee "$FRONTEND_DIR/../api-go/project/logs/frontend.log"
 ) &
 FRONTEND_PID=$!
+
+sleep 2
+
+# Check if frontend started successfully
+if ! kill -0 $FRONTEND_PID 2>/dev/null; then
+  echo "❌ Frontend failed to start. Check logs at: $BACKEND_DIR/project/logs/frontend.log"
+  kill $BACKEND_PID 2>/dev/null || true
+  exit 1
+fi
 
 echo "Backend PID: $BACKEND_PID"
 echo "Frontend PID: $FRONTEND_PID"
 
-echo "First registered user will become admin. Visit http://localhost:$FRONTEND_PORT"
+if [ "$RESET_DB" = true ]; then
+  echo "⚠️  Database was reset. First registered user will become admin."
+else
+  echo "Database preserved. Existing users remain available."
+fi
 
+echo "Visit http://localhost:$FRONTEND_PORT"
 echo "Press Ctrl+C to stop both services."
 
 cleanup() {
