@@ -90,9 +90,7 @@ export default function TelegramNotificationsPage() {
       const updated = await updateTelegramRecipient(id, {
         is_active: isActive,
       });
-      setRecipients(
-        recipients.map((r) => (r.id === id ? updated : r))
-      );
+      setRecipients(recipients.map((r) => (r.id === id ? updated : r)));
       toast({
         title: "Success",
         description: `Recipient ${isActive ? "activated" : "deactivated"}`,
@@ -213,7 +211,8 @@ export default function TelegramNotificationsPage() {
                 <span>Telegram Notifications</span>
               </h1>
               <p className="text-muted-foreground text-base sm:text-lg">
-                Receive instant alerts on Telegram when system thresholds are exceeded
+                Receive instant alerts on Telegram when system thresholds are
+                exceeded
               </p>
             </div>
             <div className="flex items-center gap-3">
@@ -258,8 +257,8 @@ export default function TelegramNotificationsPage() {
                 No Telegram Recipients
               </h3>
               <p className="text-muted-foreground max-w-md mx-auto">
-                Add your Telegram chat ID to start receiving alert notifications.
-                Follow the setup guide above to get your chat ID.
+                Add your Telegram chat ID to start receiving alert
+                notifications. Follow the setup guide above to get your chat ID.
               </p>
               <Button
                 onClick={() => setIsFormOpen(true)}

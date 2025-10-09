@@ -111,9 +111,9 @@ export function TelegramSetupGuide() {
                 <p className="font-semibold mb-1">Important Note</p>
                 <p>
                   Make sure the LunaSentri bot has been configured with a valid
-                  Telegram Bot Token by your administrator. You'll receive a test
-                  message when you click the "Test" button after adding your chat
-                  ID.
+                  Telegram Bot Token by your administrator. You'll receive a
+                  test message when you click the "Test" button after adding
+                  your chat ID.
                 </p>
               </div>
             </div>

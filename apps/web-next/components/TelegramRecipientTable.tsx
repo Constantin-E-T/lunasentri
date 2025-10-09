@@ -168,7 +168,9 @@ export function TelegramRecipientTable({
                           <Button
                             size="sm"
                             variant="outline"
-                            onClick={() => handleToggle(recipient.id, recipient.is_active)}
+                            onClick={() =>
+                              handleToggle(recipient.id, recipient.is_active)
+                            }
                             disabled={!!isLoading}
                           >
                             {isLoading === "toggle"
@@ -287,7 +289,9 @@ export function TelegramRecipientTable({
                   <Button
                     size="sm"
                     variant="outline"
-                    onClick={() => handleToggle(recipient.id, recipient.is_active)}
+                    onClick={() =>
+                      handleToggle(recipient.id, recipient.is_active)
+                    }
                     disabled={!!isLoading}
                     className="flex-1"
                   >
