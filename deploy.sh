@@ -58,10 +58,8 @@ deploy_frontend() {
     # Create temporary directory
     TEMP_DIR=$(mktemp -d)
 
-    # Copy files to temp
-    cp -r apps/web-next "$TEMP_DIR/"
-    cp package.json "$TEMP_DIR/"
-    cp pnpm-lock.yaml "$TEMP_DIR/"
+    # Copy all frontend files to temp directory root
+    cp -r apps/web-next/* "$TEMP_DIR/"
     cp deploy/caprover/frontend/captain-definition "$TEMP_DIR/"
 
     # Create tarball from temp directory

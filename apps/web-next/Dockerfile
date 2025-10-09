@@ -1,51 +1,34 @@
-# Dependencies stage
-FROM node:20-alpine AS deps
+FROM node:20-alpine
+
 WORKDIR /app
 
-# Install pnpm
-RUN npm install -g pnpm@10.18.0
-
-# Copy package files
-COPY package*.json pnpm-lock.yaml ./
-RUN pnpm install --prod --frozen-lockfile
-
-# Build stage
-FROM node:20-alpine AS builder
-WORKDIR /app
-
-# Install pnpm
-RUN npm install -g pnpm@10.18.0
+# Install system dependencies and enable pnpm
+RUN apk add --no-cache curl \
+  && corepack enable \
+  && corepack prepare pnpm@10.18.0 --activate
 
 # Copy package files
 COPY package*.json pnpm-lock.yaml ./
 RUN pnpm install --frozen-lockfile
 
-# Copy source code
+# Copy rest of the app
 COPY . .
 
-# Build the application
-RUN pnpm build
+# Declare build arguments for environment variables
+ARG NEXT_PUBLIC_API_URL
 
-# Production stage
-FROM node:20-alpine AS runner
-WORKDIR /app
-
+# Set environment variables from build arguments
+ENV NEXT_PUBLIC_API_URL=$NEXT_PUBLIC_API_URL
 ENV NODE_ENV=production
 
-# Create non-root user
-RUN addgroup --system --gid 1001 nodejs
-RUN adduser --system --uid 1001 nextjs
+# Build the app with environment variables available
+RUN pnpm run build
 
-# Copy built application
-COPY --from=builder /app/public ./public
-COPY --from=builder --chown=nextjs:nodejs /app/.next/standalone ./
-COPY --from=builder --chown=nextjs:nodejs /app/.next/static ./.next/static
+EXPOSE 80
 
-USER nextjs
+# Health check for CapRover
+HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=3 \
+  CMD curl -fsS http://localhost:80/ || exit 1
 
-EXPOSE 3000
-
-ENV PORT 3000
-ENV HOSTNAME "0.0.0.0"
-
-CMD ["node", "server.js"]
+# Start Next.js on port 80
+CMD ["pnpm", "run", "start", "-p", "80"]
