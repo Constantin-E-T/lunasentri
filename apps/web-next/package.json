@@ -6,6 +6,7 @@
     "dev": "next dev --turbopack",
     "build": "next build --turbopack",
     "start": "next start",
+    "start:prod": "next start -p 80",
     "test": "jest",
     "test:watch": "jest --watch",
     "test:coverage": "jest --coverage"
