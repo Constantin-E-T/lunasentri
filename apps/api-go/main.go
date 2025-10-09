@@ -47,8 +47,8 @@ func evaluateAlerts(alertService *alerts.Service, metricsData metrics.Metrics) {
 		return
 	}
 
-	// Use a short-lived background context to avoid cancellation issues
-	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	// Use a background context with sufficient timeout for email/webhook notifications
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
 	if err := alertService.Evaluate(ctx, metricsData); err != nil {

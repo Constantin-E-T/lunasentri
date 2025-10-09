@@ -1,11 +1,15 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+# NOTE: This script requires environment variables to be set in your shell or .env file
+# Particularly M365_CLIENT_SECRET for email functionality
+# See docs/M365-EMAIL-SETUP.md for setup instructions
+
 ROOT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
 BACKEND_DIR="$ROOT_DIR/apps/api-go"
 FRONTEND_DIR="$ROOT_DIR/apps/web-next"
 DB_FILE="$BACKEND_DIR/data/lunasentri.db"
-FRONTEND_PORT="${FRONTEND_PORT:-3001}"
+FRONTEND_PORT="${FRONTEND_PORT:-3000}"
 API_URL="${NEXT_PUBLIC_API_URL:-http://localhost:8080}"
 
 command -v go >/dev/null 2>&1 || { echo "go is required"; exit 1; }
@@ -31,14 +35,22 @@ generate_secret() {
 }
 
 AUTH_JWT_SECRET_VALUE="${AUTH_JWT_SECRET:-$(generate_secret)}"
-export CORS_ALLOWED_ORIGIN="http://localhost:$FRONTEND_PORT"
+CORS_ORIGIN="http://localhost:$FRONTEND_PORT"
 
 export NEXT_PUBLIC_API_URL="$API_URL"
 
 echo "Starting backend on 8080..."
 (
   cd "$BACKEND_DIR"
-  AUTH_JWT_SECRET="$AUTH_JWT_SECRET_VALUE" SECURE_COOKIE=false go run main.go
+  AUTH_JWT_SECRET="$AUTH_JWT_SECRET_VALUE" \
+  SECURE_COOKIE=false \
+  CORS_ALLOWED_ORIGIN="$CORS_ORIGIN" \
+  EMAIL_PROVIDER=m365 \
+  M365_TENANT_ID=c641a056-5f5c-456b-89e0-e4af295de0eb \
+  M365_CLIENT_ID=e34ddbb9-aa61-4286-b889-1deeef17ef95 \
+  M365_CLIENT_SECRET="${M365_CLIENT_SECRET:-<YOUR_CLIENT_SECRET_HERE>}" \
+  M365_SENDER=alerts@conn.digital \
+  go run main.go
 ) &
 BACKEND_PID=$!
 

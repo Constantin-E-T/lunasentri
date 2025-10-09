@@ -234,17 +234,20 @@ func (e *EmailNotifier) sendViaGraph(ctx context.Context, to, subject, htmlBody 
 	}
 	defer resp.Body.Close()
 
-	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		// Read error response
-		var errorBody bytes.Buffer
-		errorBody.ReadFrom(resp.Body)
+	// Read response body for logging
+	var responseBody bytes.Buffer
+	responseBody.ReadFrom(resp.Body)
 
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 		// Determine if error is retryable
 		if resp.StatusCode == 429 || resp.StatusCode >= 500 {
-			return fmt.Errorf("[EMAIL] retryable error status=%d body=%s", resp.StatusCode, errorBody.String())
+			return fmt.Errorf("[EMAIL] retryable error status=%d body=%s", resp.StatusCode, responseBody.String())
 		}
-		return fmt.Errorf("[EMAIL] fatal error status=%d body=%s", resp.StatusCode, errorBody.String())
+		return fmt.Errorf("[EMAIL] fatal error status=%d body=%s", resp.StatusCode, responseBody.String())
 	}
+
+	// Log successful API response (202 Accepted means queued for delivery)
+	e.logger.Printf("[EMAIL] Graph API response status=%d to=%s body=%s", resp.StatusCode, to, responseBody.String())
 
 	return nil
 }

@@ -241,3 +241,63 @@ export async function ackAlertEvent(id: number): Promise<void> {
     method: 'POST',
   });
 }
+
+// Email Notifications API
+
+export interface EmailRecipient {
+  id: number;
+  user_id: number;
+  email: string;
+  is_active: boolean;
+  created_at: string;
+  last_attempt_at?: string;
+  last_success_at?: string;
+  last_error_at?: string;
+  failure_count: number;
+  cooldown_until?: string;
+}
+
+export interface CreateEmailRecipientRequest {
+  email: string;
+}
+
+export interface UpdateEmailRecipientRequest {
+  email?: string;
+  is_active?: boolean;
+}
+
+export interface TestEmailResponse {
+  status: string;
+  recipient_id: number;
+  triggered_at: string;
+}
+
+export async function listEmailRecipients(): Promise<EmailRecipient[]> {
+  return request<EmailRecipient[]>(`${API_URL}/notifications/emails`);
+}
+
+export async function createEmailRecipient(recipient: CreateEmailRecipientRequest): Promise<EmailRecipient> {
+  return request<EmailRecipient>(`${API_URL}/notifications/emails`, {
+    method: 'POST',
+    body: JSON.stringify(recipient),
+  });
+}
+
+export async function updateEmailRecipient(id: number, recipient: UpdateEmailRecipientRequest): Promise<EmailRecipient> {
+  return request<EmailRecipient>(`${API_URL}/notifications/emails/${id}`, {
+    method: 'PUT',
+    body: JSON.stringify(recipient),
+  });
+}
+
+export async function deleteEmailRecipient(id: number): Promise<void> {
+  return requestVoid(`${API_URL}/notifications/emails/${id}`, {
+    method: 'DELETE',
+  });
+}
+
+export async function testEmailRecipient(id: number): Promise<TestEmailResponse> {
+  return request<TestEmailResponse>(`${API_URL}/notifications/emails/${id}/test`, {
+    method: 'POST',
+  });
+}
