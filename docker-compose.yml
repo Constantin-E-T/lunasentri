@@ -1,0 +1,47 @@
+version: '3.8'
+
+services:
+  backend:
+    build:
+      context: .
+      dockerfile: apps/api-go/Dockerfile
+    ports:
+      - "8080:8080"
+    environment:
+      - AUTH_JWT_SECRET=test-secret-key-for-development-only-32chars
+      - ADMIN_EMAIL=admin@test.com
+      - ADMIN_PASSWORD=admin123
+      - SECURE_COOKIE=false
+      - TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN}
+      - CORS_ORIGIN=http://localhost:3000
+    volumes:
+      - backend-data:/app/data
+    networks:
+      - lunasentri
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:8080/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  frontend:
+    build:
+      context: .
+      dockerfile: apps/web-next/Dockerfile
+    ports:
+      - "3000:3000"
+    environment:
+      - NEXT_PUBLIC_API_URL=http://localhost:8080
+    depends_on:
+      - backend
+    networks:
+      - lunasentri
+
+volumes:
+  backend-data:
+    driver: local
+
+networks:
+  lunasentri:
+    driver: bridge
