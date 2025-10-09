@@ -16,8 +16,8 @@ RUN CGO_ENABLED=0 GOOS=linux go build -a -installsuffix cgo -o lunasentri-api .
 # Final stage
 FROM alpine:latest
 
-# Install ca-certificates for HTTPS requests
-RUN apk --no-cache add ca-certificates
+# Install ca-certificates and curl for HTTPS requests and healthcheck
+RUN apk --no-cache add ca-certificates curl
 
 WORKDIR /app
 
@@ -33,8 +33,12 @@ COPY --from=builder /app/lunasentri-api .
 # Switch to non-root user
 USER appuser
 
-# Expose port
-EXPOSE 8080
+# Expose port 80
+EXPOSE 80
+
+# Health check for CapRover
+HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=3 \
+  CMD curl -fsS http://localhost:80/health || exit 1
 
 # Run the binary
 ENTRYPOINT ["./lunasentri-api"]

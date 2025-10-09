@@ -1129,7 +1129,10 @@ func main() {
 	mux := newServer(metricsCollector, serverStartTime, authService, alertService, systemService, store, webhookNotifier, telegramNotifier, accessTTL, passwordResetTTL, secureCookie)
 
 	// Create HTTP server with CORS middleware
-	port := "8080"
+	port := os.Getenv("PORT")
+	if port == "" {
+		port = "80"
+	}
 	server := &http.Server{
 		Addr:    ":" + port,
 		Handler: corsMiddleware(mux),
