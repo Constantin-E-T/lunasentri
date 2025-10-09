@@ -27,12 +27,11 @@ fi
 deploy_backend() {
     echo -e "${GREEN}Deploying Backend...${NC}"
 
-    # Create temporary directory with proper structure
+    # Create temporary directory
     TEMP_DIR=$(mktemp -d)
-    mkdir -p "$TEMP_DIR/apps"
 
-    # Copy files to temp preserving directory structure
-    cp -r apps/api-go "$TEMP_DIR/apps/"
+    # Copy all backend files to temp directory root
+    cp -r apps/api-go/* "$TEMP_DIR/"
     cp deploy/caprover/backend/captain-definition "$TEMP_DIR/"
 
     # Create tarball from temp directory
