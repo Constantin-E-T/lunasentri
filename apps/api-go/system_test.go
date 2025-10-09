@@ -13,13 +13,14 @@ import (
 
 	"github.com/Constantin-E-T/lunasentri/apps/api-go/internal/alerts"
 	"github.com/Constantin-E-T/lunasentri/apps/api-go/internal/auth"
+	router "github.com/Constantin-E-T/lunasentri/apps/api-go/internal/http"
 	"github.com/Constantin-E-T/lunasentri/apps/api-go/internal/metrics"
 	"github.com/Constantin-E-T/lunasentri/apps/api-go/internal/notifications"
 	"github.com/Constantin-E-T/lunasentri/apps/api-go/internal/storage"
 	"github.com/Constantin-E-T/lunasentri/apps/api-go/internal/system"
 )
 
-// fakeCollector implements metrics.Collector for testing
+// fakeCollector implements metrics.Collector for testing.
 type fakeCollector struct {
 	metricsToReturn metrics.Metrics
 	errToReturn     error
@@ -29,7 +30,7 @@ func (f *fakeCollector) Snapshot(ctx context.Context) (metrics.Metrics, error) {
 	return f.metricsToReturn, f.errToReturn
 }
 
-// fakeSystemService implements system.Service for testing
+// fakeSystemService implements system.Service for testing.
 type fakeSystemService struct {
 	systemInfoToReturn system.SystemInfo
 	errToReturn        error
@@ -39,25 +40,39 @@ func (f *fakeSystemService) GetSystemInfo(ctx context.Context) (system.SystemInf
 	return f.systemInfoToReturn, f.errToReturn
 }
 
-// createTestStore creates a store for testing
+// createTestStore creates a store for testing.
 func createTestStore(t *testing.T) storage.Store {
-	// Create in-memory SQLite store
+	t.Helper()
+
 	store, err := storage.NewSQLiteStore("file::memory:?cache=shared")
 	if err != nil {
 		t.Fatalf("Failed to create test store: %v", err)
 	}
+
+	t.Cleanup(func() {
+		if err := store.Close(); err != nil {
+			t.Errorf("Failed to close test store: %v", err)
+		}
+	})
+
 	return store
 }
 
-// createTestAuthService creates an auth service for testing
+// createTestAuthService creates an auth service for testing.
 func createTestAuthService(t *testing.T) *auth.Service {
-	// Create in-memory SQLite store
+	t.Helper()
+
 	store, err := storage.NewSQLiteStore("file::memory:?cache=shared")
 	if err != nil {
 		t.Fatalf("Failed to create test store: %v", err)
 	}
 
-	// Create auth service with test secret
+	t.Cleanup(func() {
+		if err := store.Close(); err != nil {
+			t.Errorf("Failed to close auth test store: %v", err)
+		}
+	})
+
 	authService, err := auth.NewService(store, "test-secret-key-for-testing", 15*time.Minute)
 	if err != nil {
 		t.Fatalf("Failed to create test auth service: %v", err)
@@ -66,21 +81,56 @@ func createTestAuthService(t *testing.T) *auth.Service {
 	return authService
 }
 
-// createTestAlertService creates an alert service for testing
+// createTestAlertService creates an alert service for testing.
 func createTestAlertService(t *testing.T) *alerts.Service {
-	// Create in-memory SQLite store
+	t.Helper()
+
 	store, err := storage.NewSQLiteStore("file::memory:?cache=shared")
 	if err != nil {
 		t.Fatalf("Failed to create test store: %v", err)
 	}
 
-	// Create a no-op notifier for testing
+	t.Cleanup(func() {
+		if err := store.Close(); err != nil {
+			t.Errorf("Failed to close alert test store: %v", err)
+		}
+	})
+
 	notifier := notifications.NewNotifier(store, log.Default())
 	return alerts.NewService(store, notifier)
 }
 
+// newTestServer constructs an httptest.Server backed by the router.
+func newTestServer(t *testing.T, systemService system.Service, collector metrics.Collector) *httptest.Server {
+	t.Helper()
+
+	store := createTestStore(t)
+	authService := createTestAuthService(t)
+	alertService := createTestAlertService(t)
+	notifier := notifications.NewNotifier(store, log.Default())
+
+	routerCfg := &router.RouterConfig{
+		Collector:        collector,
+		ServerStartTime:  time.Now(),
+		AuthService:      authService,
+		AlertService:     alertService,
+		SystemService:    systemService,
+		Store:            store,
+		WebhookNotifier:  notifier,
+		TelegramNotifier: nil,
+		AccessTTL:        15 * time.Minute,
+		PasswordResetTTL: 15 * time.Minute,
+		SecureCookie:     false,
+		LocalHostMetrics: true,
+	}
+
+	handler := router.CORSMiddleware(router.NewRouter(routerCfg))
+	server := httptest.NewServer(handler)
+	t.Cleanup(server.Close)
+	return server
+}
+
 func TestSystemInfoHandler(t *testing.T) {
-	// Setup fake system service with known values
 	fakeSystemInfo := system.SystemInfo{
 		Hostname:        "test-host",
 		Platform:        "linux",
@@ -97,133 +147,88 @@ func TestSystemInfoHandler(t *testing.T) {
 		systemInfoToReturn: fakeSystemInfo,
 		errToReturn:        nil,
 	}
-
-	// Create test services
-	store := createTestStore(t)
-	authService := createTestAuthService(t)
-	alertService := createTestAlertService(t)
-	notifier := notifications.NewNotifier(store, log.Default())
 	collector := &fakeCollector{
 		metricsToReturn: metrics.Metrics{},
 		errToReturn:     nil,
 	}
 
-	// Create server
-	mux := newServer(collector, time.Now(), authService, alertService, systemService, store, notifier, nil, 15*time.Minute, 15*time.Minute, false)
-	server := httptest.NewServer(corsMiddleware(mux))
-	defer server.Close()
+	server := newTestServer(t, systemService, collector)
 
-	// Make request to /system/info endpoint
 	resp, err := http.Get(server.URL + "/system/info")
 	if err != nil {
 		t.Fatalf("Failed to make request: %v", err)
 	}
 	defer resp.Body.Close()
 
-	// Assert HTTP status
 	if resp.StatusCode != http.StatusOK {
 		t.Errorf("Expected status 200, got %d", resp.StatusCode)
 	}
 
-	// Assert Content-Type header
-	contentType := resp.Header.Get("Content-Type")
-	if contentType != "application/json" {
+	if contentType := resp.Header.Get("Content-Type"); contentType != "application/json" {
 		t.Errorf("Expected Content-Type application/json, got %s", contentType)
 	}
 
-	// Decode response
-	var receivedSystemInfo system.SystemInfo
-	if err := json.NewDecoder(resp.Body).Decode(&receivedSystemInfo); err != nil {
+	var received system.SystemInfo
+	if err := json.NewDecoder(resp.Body).Decode(&received); err != nil {
 		t.Fatalf("Failed to decode response: %v", err)
 	}
 
-	// Assert system info data
-	if receivedSystemInfo.Hostname != fakeSystemInfo.Hostname {
-		t.Errorf("Expected hostname %s, got %s", fakeSystemInfo.Hostname, receivedSystemInfo.Hostname)
+	if received.Hostname != fakeSystemInfo.Hostname {
+		t.Errorf("Expected hostname %s, got %s", fakeSystemInfo.Hostname, received.Hostname)
 	}
-	if receivedSystemInfo.Platform != fakeSystemInfo.Platform {
-		t.Errorf("Expected platform %s, got %s", fakeSystemInfo.Platform, receivedSystemInfo.Platform)
+	if received.Platform != fakeSystemInfo.Platform {
+		t.Errorf("Expected platform %s, got %s", fakeSystemInfo.Platform, received.Platform)
 	}
-	if receivedSystemInfo.CPUCores != fakeSystemInfo.CPUCores {
-		t.Errorf("Expected CPU cores %d, got %d", fakeSystemInfo.CPUCores, receivedSystemInfo.CPUCores)
+	if received.CPUCores != fakeSystemInfo.CPUCores {
+		t.Errorf("Expected CPU cores %d, got %d", fakeSystemInfo.CPUCores, received.CPUCores)
 	}
-	if receivedSystemInfo.MemoryTotalMB != fakeSystemInfo.MemoryTotalMB {
-		t.Errorf("Expected memory %d MB, got %d MB", fakeSystemInfo.MemoryTotalMB, receivedSystemInfo.MemoryTotalMB)
+	if received.MemoryTotalMB != fakeSystemInfo.MemoryTotalMB {
+		t.Errorf("Expected memory %d MB, got %d MB", fakeSystemInfo.MemoryTotalMB, received.MemoryTotalMB)
 	}
-
-	t.Logf("System info test successful - received: %+v", receivedSystemInfo)
 }
 
 func TestSystemInfoHandlerError(t *testing.T) {
-	// Setup fake system service that returns an error
 	systemService := &fakeSystemService{
 		systemInfoToReturn: system.SystemInfo{},
 		errToReturn:        errors.New("failed to collect system info"),
 	}
-
-	// Create test services
-	store := createTestStore(t)
-	authService := createTestAuthService(t)
-	alertService := createTestAlertService(t)
-	notifier := notifications.NewNotifier(store, log.Default())
 	collector := &fakeCollector{
 		metricsToReturn: metrics.Metrics{},
 		errToReturn:     nil,
 	}
 
-	// Create server
-	mux := newServer(collector, time.Now(), authService, alertService, systemService, store, notifier, nil, 15*time.Minute, 15*time.Minute, false)
-	server := httptest.NewServer(corsMiddleware(mux))
-	defer server.Close()
+	server := newTestServer(t, systemService, collector)
 
-	// Make request to /system/info endpoint
 	resp, err := http.Get(server.URL + "/system/info")
 	if err != nil {
 		t.Fatalf("Failed to make request: %v", err)
 	}
 	defer resp.Body.Close()
 
-	// Assert HTTP status should be 500
 	if resp.StatusCode != http.StatusInternalServerError {
 		t.Errorf("Expected status 500, got %d", resp.StatusCode)
 	}
-
-	t.Logf("System info error test successful - got expected 500 status")
 }
 
 func TestSystemInfoHandlerMethodNotAllowed(t *testing.T) {
-	// Setup fake system service
 	systemService := &fakeSystemService{
 		systemInfoToReturn: system.SystemInfo{},
 		errToReturn:        nil,
 	}
-
-	// Create test services
-	store := createTestStore(t)
-	authService := createTestAuthService(t)
-	alertService := createTestAlertService(t)
-	notifier := notifications.NewNotifier(store, log.Default())
 	collector := &fakeCollector{
 		metricsToReturn: metrics.Metrics{},
 		errToReturn:     nil,
 	}
 
-	// Create server
-	mux := newServer(collector, time.Now(), authService, alertService, systemService, store, notifier, nil, 15*time.Minute, 15*time.Minute, false)
-	server := httptest.NewServer(corsMiddleware(mux))
-	defer server.Close()
+	server := newTestServer(t, systemService, collector)
 
-	// Make POST request to /system/info endpoint (should fail)
 	resp, err := http.Post(server.URL+"/system/info", "application/json", strings.NewReader("{}"))
 	if err != nil {
 		t.Fatalf("Failed to make request: %v", err)
 	}
 	defer resp.Body.Close()
 
-	// Assert HTTP status should be 405
 	if resp.StatusCode != http.StatusMethodNotAllowed {
 		t.Errorf("Expected status 405, got %d", resp.StatusCode)
 	}
-
-	t.Logf("System info method not allowed test successful - got expected 405 status")
 }
