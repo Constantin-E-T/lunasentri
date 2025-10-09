@@ -137,6 +137,30 @@ export default function UsersPage() {
             </Link>
           </div>
           <div className="flex items-center gap-4">
+            <Link
+              href="/"
+              className="text-sm text-muted-foreground hover:text-foreground transition-colors"
+            >
+              Dashboard
+            </Link>
+            <Link
+              href="/alerts"
+              className="text-sm text-muted-foreground hover:text-foreground transition-colors"
+            >
+              Alerts
+            </Link>
+            <Link
+              href="/notifications/telegram"
+              className="text-sm text-muted-foreground hover:text-foreground transition-colors"
+            >
+              Telegram Alerts
+            </Link>
+            <Link
+              href="/settings"
+              className="text-sm text-muted-foreground hover:text-foreground transition-colors"
+            >
+              Settings
+            </Link>
             <span className="text-sm text-muted-foreground">
               {currentUser?.email}
             </span>

@@ -227,6 +227,18 @@ export default function SettingsPage() {
             >
               Dashboard
             </Link>
+            <Link
+              href="/alerts"
+              className="text-sm text-muted-foreground hover:text-foreground transition-colors"
+            >
+              Alerts
+            </Link>
+            <Link
+              href="/notifications/telegram"
+              className="text-sm text-muted-foreground hover:text-foreground transition-colors"
+            >
+              Telegram Alerts
+            </Link>
           </div>
         </div>
       </div>

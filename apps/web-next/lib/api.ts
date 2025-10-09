@@ -301,3 +301,60 @@ export async function testEmailRecipient(id: number): Promise<TestEmailResponse>
     method: 'POST',
   });
 }
+
+// Telegram Notifications API
+
+export interface TelegramRecipient {
+  id: number;
+  chat_id: string;
+  is_active: boolean;
+  created_at: string;
+  last_success_at?: string;
+  failure_count: number;
+}
+
+export interface CreateTelegramRecipientRequest {
+  chat_id: string;
+}
+
+export interface UpdateTelegramRecipientRequest {
+  chat_id?: string;
+  is_active?: boolean;
+}
+
+export interface TestTelegramResponse {
+  status: string;
+  recipient_id: number;
+  triggered_at: string;
+}
+
+export async function listTelegramRecipients(): Promise<TelegramRecipient[]> {
+  return request<TelegramRecipient[]>(`${API_URL}/notifications/telegram`);
+}
+
+export async function createTelegramRecipient(recipient: CreateTelegramRecipientRequest): Promise<TelegramRecipient> {
+  return request<TelegramRecipient>(`${API_URL}/notifications/telegram`, {
+    method: 'POST',
+    body: JSON.stringify(recipient),
+  });
+}
+
+export async function updateTelegramRecipient(id: number, recipient: UpdateTelegramRecipientRequest): Promise<TelegramRecipient> {
+  return request<TelegramRecipient>(`${API_URL}/notifications/telegram/${id}`, {
+    method: 'PUT',
+    body: JSON.stringify(recipient),
+  });
+}
+
+export async function deleteTelegramRecipient(id: number): Promise<void> {
+  return requestVoid(`${API_URL}/notifications/telegram/${id}`, {
+    method: 'DELETE',
+  });
+}
+
+export async function testTelegramRecipient(id: number): Promise<TestTelegramResponse> {
+  return request<TestTelegramResponse>(`${API_URL}/notifications/telegram/${id}/test`, {
+    method: 'POST',
+  });
+}
+

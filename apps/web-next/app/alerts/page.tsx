@@ -205,6 +205,12 @@ export default function AlertsPage() {
               </Link>
             )}
             <Link
+              href="/notifications/telegram"
+              className="rounded-full bg-card/40 border border-border/30 px-4 py-2 text-muted-foreground transition-all duration-200 hover:text-foreground hover:border-border"
+            >
+              Telegram Alerts
+            </Link>
+            <Link
               href="/settings"
               className="rounded-full bg-card/40 border border-border/30 px-4 py-2 text-muted-foreground transition-all duration-200 hover:text-foreground hover:border-border"
             >
