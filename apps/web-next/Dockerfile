@@ -2,7 +2,7 @@ FROM node:20-alpine
 
 WORKDIR /app
 
-# Install system dependencies and enable pnpm
+# Install system dependencies
 RUN apk add --no-cache curl \
   && corepack enable \
   && corepack prepare pnpm@10.18.0 --activate
@@ -31,4 +31,4 @@ HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=3 \
   CMD curl -fsS http://localhost:80/ || exit 1
 
 # Start Next.js on port 80
-CMD ["pnpm", "run", "start", "-p", "80"]
+CMD ["pnpm", "run", "start", "--", "-p", "80"]

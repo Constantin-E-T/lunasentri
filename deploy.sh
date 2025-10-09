@@ -60,6 +60,8 @@ deploy_frontend() {
 
     # Copy all frontend files to temp directory root
     cp -r apps/web-next/* "$TEMP_DIR/"
+    # Copy pnpm-lock.yaml from monorepo root
+    cp pnpm-lock.yaml "$TEMP_DIR/"
     cp deploy/caprover/frontend/captain-definition "$TEMP_DIR/"
 
     # Create tarball from temp directory
