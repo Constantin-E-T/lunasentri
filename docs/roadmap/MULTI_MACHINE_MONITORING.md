@@ -4,6 +4,15 @@
 **Priority**: High (Critical Feature Gap)
 **Estimated Effort**: 3-4 weeks
 
+---
+
+## MVP Scope (Weeks 1–3)
+
+- **Week 1**: Land database migrations (`machines`, `metrics_history`), storage layer, and machine registration API with hashed API keys + per-user isolation.
+- **Week 2**: Build read-only Go agent (HTTPS POST + checksum), ship install script, add revocation path; no mTLS yet.
+- **Week 3**: Frontend machine selector + onboarding UI; hide legacy host metrics behind `LOCAL_HOST_METRICS` flag and require machine selection.
+- **Deferred**: WebSocket streaming, bulk performance tuning, supply-chain automation, mTLS PKI—log them in “Post-MVP Hardening” once MVP is live.
+
 ## Problem Statement
 
 Currently, LunaSentri monitors only the server it's running on. All users see the same metrics (the host server's CPU, memory, disk). This is a critical limitation that prevents the system from being a true multi-user monitoring solution.

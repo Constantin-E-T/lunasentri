@@ -255,6 +255,38 @@ func (m *mockHTTPStore) MarkTelegramSuccess(ctx context.Context, id int, lastSuc
 func (m *mockHTTPStore) UpdateTelegramDeliveryState(ctx context.Context, id int, lastAttemptAt time.Time, cooldownUntil *time.Time) error {
 	return fmt.Errorf("not implemented")
 }
+
+// Machine methods (not implemented for these tests)
+func (m *mockHTTPStore) CreateMachine(ctx context.Context, userID int, name, hostname, apiKeyHash string) (*storage.Machine, error) {
+	return nil, fmt.Errorf("not implemented")
+}
+func (m *mockHTTPStore) GetMachineByID(ctx context.Context, id int) (*storage.Machine, error) {
+	return nil, fmt.Errorf("not implemented")
+}
+func (m *mockHTTPStore) GetMachineByAPIKey(ctx context.Context, apiKeyHash string) (*storage.Machine, error) {
+	return nil, fmt.Errorf("not implemented")
+}
+func (m *mockHTTPStore) ListMachines(ctx context.Context, userID int) ([]storage.Machine, error) {
+	return nil, fmt.Errorf("not implemented")
+}
+func (m *mockHTTPStore) UpdateMachineStatus(ctx context.Context, id int, status string, lastSeen time.Time) error {
+	return fmt.Errorf("not implemented")
+}
+func (m *mockHTTPStore) DeleteMachine(ctx context.Context, id int, userID int) error {
+	return fmt.Errorf("not implemented")
+}
+
+// Metrics history methods (not implemented for these tests)
+func (m *mockHTTPStore) InsertMetrics(ctx context.Context, machineID int, cpuPct, memUsedPct, diskUsedPct float64, netRxBytes, netTxBytes int64, timestamp time.Time) error {
+	return fmt.Errorf("not implemented")
+}
+func (m *mockHTTPStore) GetLatestMetrics(ctx context.Context, machineID int) (*storage.MetricsHistory, error) {
+	return nil, fmt.Errorf("not implemented")
+}
+func (m *mockHTTPStore) GetMetricsHistory(ctx context.Context, machineID int, from, to time.Time, limit int) ([]storage.MetricsHistory, error) {
+	return nil, fmt.Errorf("not implemented")
+}
+
 func (m *mockHTTPStore) Close() error {
 	return nil
 }

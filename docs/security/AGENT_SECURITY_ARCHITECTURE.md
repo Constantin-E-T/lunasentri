@@ -1,8 +1,78 @@
 # LunaSentri Agent - Security Architecture & Threat Model
 
-**Status**: Security Review & Planning Phase
+**Status**: Phase 1 Implementation (API Key Auth) - mTLS Planned
 **Priority**: CRITICAL - Security First Approach
 **Last Updated**: 2025-10-09
+
+---
+
+## Current Implementation Status
+
+### Phase 1: API Key Authentication (CURRENT)
+
+The current implementation uses **scoped API keys with SHA-256 hashing** for machine authentication:
+
+- **Machine Registration**: When a machine is registered, it receives a unique API key
+- **Key Storage**: API keys are hashed (SHA-256) before storage in the database
+- **Authentication**: Agents send the API key in request headers; server validates against stored hash
+- **Revocation**: Keys can be revoked by deleting the machine record (immediate effect)
+- **Transport Security**: All communication uses HTTPS (TLS 1.2+)
+
+**Implementation Details**:
+
+```go
+// Machine service generates and hashes API keys
+apiKey, _ := machines.GenerateAPIKey()          // 32-byte random key
+hash := machines.HashAPIKey(apiKey)             // SHA-256 hash
+machine, _ := service.RegisterMachine(ctx, userID, name, hostname, hash)
+
+// Agent includes key in headers
+req.Header.Set("X-API-Key", apiKey)
+
+// Server validates by comparing hash
+storedMachine, _ := store.GetMachineByAPIKey(ctx, hashFromRequest)
+```
+
+**Security Trade-offs**:
+
+- ✅ **Simple**: Easy to implement and debug
+- ✅ **Adequate for MVP**: Provides basic authentication and authorization
+- ✅ **Revocable**: Can be invalidated immediately
+- ⚠️ **Key Theft Risk**: If API server is compromised, attacker could steal hashed keys
+- ⚠️ **No Automatic Rotation**: Keys must be manually rotated
+- ⚠️ **Replay Risk**: Without additional measures, stolen keys can be replayed
+
+### Phase 2: Mutual TLS (ROADMAP)
+
+**Target Architecture**: Upgrade to client certificate-based mTLS authentication
+
+See `docs/roadmap/MULTI_MACHINE_MONITORING.md` for the complete Phase 2 specification, which includes:
+
+- Client certificate generation during machine registration
+- mTLS handshake for cryptographic authentication
+- Automatic certificate rotation (1-year validity, 30-day renewal window)
+- CRL/OCSP-based revocation
+- Elimination of API key theft vectors
+
+**Migration Path**: The current API key implementation is designed to be replaced without breaking changes to the storage layer or machine registration flow.
+
+---
+
+## MVP Scope (Phase 1 Complete → Phase 2 Active)
+
+- **Objective**: Ship a read-only agent that authenticates with scoped API keys, runs as a non-root user, and sends outbound HTTPS metrics only.
+- **Completed**:
+  - Machine registry with per-user isolation ✅
+  - API key generation and hashing ✅
+  - Database schema for machines and metrics_history ✅
+  - Storage layer with full test coverage ✅
+- **Next Phase (Phase 2)**:
+  - Agent binary implementation (Go client)
+  - Agent ingestion endpoints in API server
+  - mTLS certificate infrastructure
+  - Binary checksum verification
+  - Onboarding documentation
+- **Out of Scope (Post-Launch Hardening)**: External security audit, bug bounty program, full supply-chain attestation.
 
 ---
 
@@ -68,6 +138,7 @@ LunaSentri agents will run on user production servers with elevated privileges (
 ```
 
 **Implementation**:
+
 - Agent has **no remote code execution** capability
 - No websocket server (only client)
 - No command interpreter
@@ -76,6 +147,7 @@ LunaSentri agents will run on user production servers with elevated privileges (
 
 **Why This Matters**:
 🛡️ **Even if LunaSentri API is fully compromised**, attacker cannot:
+
 - Execute commands on user servers
 - Read sensitive files
 - Install malware
@@ -86,6 +158,8 @@ LunaSentri agents will run on user production servers with elevated privileges (
 ### 2. **Mutual TLS (mTLS) Authentication**
 
 **Decision**: Use client certificates for cryptographic authentication, not API keys.
+
+> **MVP Note**: The initial launch uses scoped API keys with HTTPS + revocation. mTLS remains the target architecture and moves into active work immediately after the MVP agent ships.
 
 ```
 ┌──────────────────┐                    ┌──────────────────┐
@@ -105,6 +179,7 @@ LunaSentri agents will run on user production servers with elevated privileges (
 ```
 
 **Why mTLS > API Keys**:
+
 - ✅ **Cannot be stolen** from server compromise (private key stays on agent)
 - ✅ **Cryptographically verified** (not just a password)
 - ✅ **Automatic rotation** (short-lived certs)
@@ -112,6 +187,7 @@ LunaSentri agents will run on user production servers with elevated privileges (
 - ✅ **Prevents replay attacks** (TLS nonce)
 
 **Implementation**:
+
 ```go
 // Agent side
 tlsConfig := &tls.Config{
@@ -133,6 +209,7 @@ tlsConfig := &tls.Config{
 ### 3. **Certificate Lifecycle Management**
 
 **Certificate Generation** (on machine registration):
+
 ```bash
 # User runs on their server
 curl -sSL https://lunasentri.com/install.sh | bash
@@ -146,6 +223,7 @@ curl -sSL https://lunasentri.com/install.sh | bash
 ```
 
 **Certificate Storage**:
+
 ```
 /etc/lunasentri/
 ├── agent.crt          # Public certificate (can be read)
@@ -155,12 +233,14 @@ curl -sSL https://lunasentri.com/install.sh | bash
 ```
 
 **Certificate Revocation**:
+
 - API maintains Certificate Revocation List (CRL)
 - Agent checks CRL on startup
 - Revoked certs rejected at TLS handshake
 - User can revoke cert from dashboard (immediate effect)
 
 **Auto-Rotation**:
+
 - Certs expire after 1 year
 - Agent auto-renews 30 days before expiry
 - Zero-downtime rotation
@@ -190,6 +270,7 @@ func (a *Agent) CollectMetrics() Metrics {
 ```
 
 **What Agent NEVER Does**:
+
 - ❌ Execute shell commands from API
 - ❌ Download and run scripts
 - ❌ Modify its own code
@@ -198,6 +279,7 @@ func (a *Agent) CollectMetrics() Metrics {
 - ❌ Run as root (drops privileges)
 
 **Metrics Collection Whitelist**:
+
 ```go
 // Only these files can be read
 var allowedPaths = []string{
@@ -224,6 +306,7 @@ func readMetricFile(path string) ([]byte, error) {
 ### 5. **Privilege Isolation**
 
 **Run as Non-Root User**:
+
 ```bash
 # Agent runs as dedicated user with minimal permissions
 useradd -r -s /bin/false lunasentri
@@ -242,6 +325,7 @@ ReadWritePaths=/var/lib/lunasentri
 ```
 
 **Linux Capabilities** (not full root):
+
 ```bash
 # Only grant specific capabilities needed for metrics
 setcap cap_sys_ptrace,cap_net_admin=eip /opt/lunasentri/agent
@@ -250,6 +334,7 @@ setcap cap_sys_ptrace,cap_net_admin=eip /opt/lunasentri/agent
 ```
 
 **Sandboxing** (future enhancement):
+
 - Run in container (Docker/systemd-nspawn)
 - SELinux/AppArmor profiles
 - Seccomp filters (restrict syscalls)
@@ -259,6 +344,7 @@ setcap cap_sys_ptrace,cap_net_admin=eip /opt/lunasentri/agent
 ### 6. **Outbound-Only Communication**
 
 **Network Architecture**:
+
 ```
 ┌──────────────────────────────────────┐
 │  User's Server (Firewall)            │
@@ -282,12 +368,14 @@ setcap cap_sys_ptrace,cap_net_admin=eip /opt/lunasentri/agent
 ```
 
 **Implementation**:
+
 - Agent initiates all connections (acts as HTTPS client)
 - No listening sockets (not a server)
 - Firewall-friendly (only needs outbound HTTPS)
 - Works behind NAT/corporate firewalls
 
 **Connection Pattern**:
+
 ```go
 // Agent establishes long-lived connection
 func (a *Agent) Connect() {
@@ -318,6 +406,7 @@ func (a *Agent) Connect() {
 **Solution**: Cryptographically sign all agent binaries.
 
 **Implementation**:
+
 ```bash
 # 1. Build agent
 GOOS=linux GOARCH=amd64 go build -o agent-linux-amd64
@@ -338,6 +427,7 @@ sha256sum -c checksums.txt
 ```
 
 **Install Script Verification**:
+
 ```bash
 #!/bin/bash
 # install.sh - Verifies binary before running
@@ -367,6 +457,7 @@ sudo chmod +x /opt/lunasentri/agent
 ### 8. **Data Minimization & Privacy**
 
 **What Agent Sends**:
+
 ```json
 {
   "timestamp": "2025-10-09T12:34:56Z",
@@ -379,6 +470,7 @@ sudo chmod +x /opt/lunasentri/agent
 ```
 
 **What Agent NEVER Sends**:
+
 - ❌ Environment variables (may contain secrets)
 - ❌ Running processes (may reveal business logic)
 - ❌ File contents
@@ -388,6 +480,7 @@ sudo chmod +x /opt/lunasentri/agent
 - ❌ Configuration files
 
 **Anonymization**:
+
 - No personally identifiable information (PII)
 - No business-sensitive data
 - Only aggregated system metrics
@@ -401,6 +494,7 @@ sudo chmod +x /opt/lunasentri/agent
 **Response Plan**:
 
 1. **Immediate Kill Switch**:
+
 ```bash
 # API operator revokes all certificates
 POST /admin/emergency/revoke-all-certs
@@ -410,6 +504,7 @@ POST /admin/emergency/revoke-all-certs
 ```
 
 2. **Agent Auto-Shutdown**:
+
 ```go
 // Agent checks certificate status every 30s
 func (a *Agent) healthCheck() {
@@ -422,11 +517,13 @@ func (a *Agent) healthCheck() {
 ```
 
 3. **User Notification**:
+
 - Email all users about security incident
 - Instructions to manually stop agents
 - Timeline for resolution
 
 4. **Post-Incident**:
+
 - Issue new CA certificate
 - Users re-register agents with new certs
 - Audit logs reviewed
@@ -437,6 +534,7 @@ func (a *Agent) healthCheck() {
 ### 10. **Audit Logging**
 
 **Agent-Side Logging**:
+
 ```
 2025-10-09 12:34:56 INFO  Agent started (version 1.0.0)
 2025-10-09 12:34:57 INFO  TLS connection established (api.lunasentri.com)
@@ -446,6 +544,7 @@ func (a *Agent) healthCheck() {
 ```
 
 **API-Side Logging**:
+
 ```
 2025-10-09 12:34:57 INFO  Agent connected (machine_id: 123, user_id: 45)
 2025-10-09 12:34:57 INFO  Certificate validated (CN: machine-123, expires: 2026-10-09)
@@ -453,6 +552,7 @@ func (a *Agent) healthCheck() {
 ```
 
 **Immutable Audit Trail**:
+
 - All agent connections logged
 - Certificate issuance/revocation logged
 - Metrics ingestion logged
@@ -532,11 +632,13 @@ func (a *Agent) healthCheck() {
 ```
 
 **Pros**:
+
 - ✅ No custom agent needed
 - ✅ Uses standard SSH (well-tested)
 - ✅ User controls SSH access (can revoke anytime)
 
 **Cons**:
+
 - ❌ Requires SSH access (firewall issues)
 - ❌ SSH credentials stored in LunaSentri
 - ❌ Higher latency
@@ -567,6 +669,7 @@ func (a *Agent) healthCheck() {
 ## Implementation Checklist
 
 ### Phase 1: Security Foundation (Week 1-2)
+
 - [ ] Design mTLS certificate architecture
 - [ ] Implement Certificate Authority (CA) service
 - [ ] Build certificate issuance API
@@ -575,6 +678,7 @@ func (a *Agent) healthCheck() {
 - [ ] Write security code review checklist
 
 ### Phase 2: Agent Development (Week 2-3)
+
 - [ ] Build read-only metrics collector
 - [ ] Implement mTLS client
 - [ ] Add certificate verification
@@ -583,6 +687,7 @@ func (a *Agent) healthCheck() {
 - [ ] Implement audit logging
 
 ### Phase 3: Testing & Hardening (Week 3-4)
+
 - [ ] Static analysis (gosec, semgrep)
 - [ ] Dependency scanning (trivy)
 - [ ] Penetration testing
@@ -591,6 +696,7 @@ func (a *Agent) healthCheck() {
 - [ ] Security documentation
 
 ### Phase 4: Open Source & Transparency (Week 4)
+
 - [ ] Open source agent repository
 - [ ] Security audit published
 - [ ] Bug bounty program launched
@@ -628,6 +734,7 @@ func (a *Agent) healthCheck() {
 ## Conclusion
 
 **Security is the #1 priority** for LunaSentri agent architecture. By implementing:
+
 - ✅ Read-only agent design
 - ✅ Mutual TLS authentication
 - ✅ No remote code execution
@@ -637,6 +744,7 @@ func (a *Agent) healthCheck() {
 We create a **trustworthy monitoring solution** that users can confidently deploy on production servers.
 
 **Next Steps**:
+
 1. Review this security architecture
 2. Approve or request modifications
 3. Begin Phase 1 security implementation

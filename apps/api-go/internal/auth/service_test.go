@@ -293,6 +293,44 @@ func (m *mockStore) UpdateTelegramDeliveryState(ctx context.Context, id int, las
 	return nil
 }
 
+// Machine methods (stub implementations for testing)
+func (m *mockStore) CreateMachine(ctx context.Context, userID int, name, hostname, apiKeyHash string) (*storage.Machine, error) {
+	return &storage.Machine{ID: 1, UserID: userID, Name: name, Hostname: hostname, APIKey: apiKeyHash, Status: "offline"}, nil
+}
+
+func (m *mockStore) GetMachineByID(ctx context.Context, id int) (*storage.Machine, error) {
+	return &storage.Machine{ID: id, UserID: 1, Name: "test-machine", Hostname: "test-host", APIKey: "hash", Status: "online"}, nil
+}
+
+func (m *mockStore) GetMachineByAPIKey(ctx context.Context, apiKeyHash string) (*storage.Machine, error) {
+	return &storage.Machine{ID: 1, UserID: 1, Name: "test-machine", Hostname: "test-host", APIKey: apiKeyHash, Status: "online"}, nil
+}
+
+func (m *mockStore) ListMachines(ctx context.Context, userID int) ([]storage.Machine, error) {
+	return []storage.Machine{}, nil
+}
+
+func (m *mockStore) UpdateMachineStatus(ctx context.Context, id int, status string, lastSeen time.Time) error {
+	return nil
+}
+
+func (m *mockStore) DeleteMachine(ctx context.Context, id int, userID int) error {
+	return nil
+}
+
+// Metrics history methods (stub implementations for testing)
+func (m *mockStore) InsertMetrics(ctx context.Context, machineID int, cpuPct, memUsedPct, diskUsedPct float64, netRxBytes, netTxBytes int64, timestamp time.Time) error {
+	return nil
+}
+
+func (m *mockStore) GetLatestMetrics(ctx context.Context, machineID int) (*storage.MetricsHistory, error) {
+	return &storage.MetricsHistory{MachineID: machineID, CPUPct: 50.0, MemUsedPct: 60.0, DiskUsedPct: 70.0}, nil
+}
+
+func (m *mockStore) GetMetricsHistory(ctx context.Context, machineID int, from, to time.Time, limit int) ([]storage.MetricsHistory, error) {
+	return []storage.MetricsHistory{}, nil
+}
+
 func (m *mockStore) Close() error {
 	return nil
 }

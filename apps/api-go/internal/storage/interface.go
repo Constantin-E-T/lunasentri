@@ -104,6 +104,19 @@ type Store interface {
 	MarkTelegramSuccess(ctx context.Context, id int, lastSuccessAt time.Time) error
 	UpdateTelegramDeliveryState(ctx context.Context, id int, lastAttemptAt time.Time, cooldownUntil *time.Time) error
 
+	// Machine methods
+	CreateMachine(ctx context.Context, userID int, name, hostname, apiKeyHash string) (*Machine, error)
+	GetMachineByID(ctx context.Context, id int) (*Machine, error)
+	GetMachineByAPIKey(ctx context.Context, apiKeyHash string) (*Machine, error)
+	ListMachines(ctx context.Context, userID int) ([]Machine, error)
+	UpdateMachineStatus(ctx context.Context, id int, status string, lastSeen time.Time) error
+	DeleteMachine(ctx context.Context, id int, userID int) error
+
+	// Metrics history methods
+	InsertMetrics(ctx context.Context, machineID int, cpuPct, memUsedPct, diskUsedPct float64, netRxBytes, netTxBytes int64, timestamp time.Time) error
+	GetLatestMetrics(ctx context.Context, machineID int) (*MetricsHistory, error)
+	GetMetricsHistory(ctx context.Context, machineID int, from, to time.Time, limit int) ([]MetricsHistory, error)
+
 	// Close closes the storage connection
 	Close() error
 }

@@ -94,3 +94,21 @@ func (sc *SystemCollector) Snapshot(ctx context.Context) (Metrics, error) {
 
 	return result, nil
 }
+
+// NoOpCollector implements Collector but returns empty metrics (for when local host metrics are disabled)
+type NoOpCollector struct{}
+
+// NewNoOpCollector creates a new NoOpCollector instance
+func NewNoOpCollector() *NoOpCollector {
+	return &NoOpCollector{}
+}
+
+// Snapshot returns empty metrics
+func (nc *NoOpCollector) Snapshot(ctx context.Context) (Metrics, error) {
+	return Metrics{
+		CPUPct:      0,
+		MemUsedPct:  0,
+		DiskUsedPct: 0,
+		UptimeS:     0,
+	}, nil
+}

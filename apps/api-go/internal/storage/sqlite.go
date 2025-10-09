@@ -196,6 +196,42 @@ func (s *SQLiteStore) migrate() error {
             CREATE INDEX IF NOT EXISTS idx_telegram_recipients_is_active ON telegram_recipients(is_active);
             `,
 		},
+		{
+			version: "010_machines",
+			sql: `
+            CREATE TABLE IF NOT EXISTS machines (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id INTEGER NOT NULL,
+                name TEXT NOT NULL,
+                hostname TEXT,
+                api_key TEXT UNIQUE NOT NULL,
+                status TEXT DEFAULT 'offline',
+                last_seen TIMESTAMP,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+            );
+            CREATE INDEX IF NOT EXISTS idx_machines_user_id ON machines(user_id);
+            CREATE INDEX IF NOT EXISTS idx_machines_api_key ON machines(api_key);
+            CREATE INDEX IF NOT EXISTS idx_machines_status ON machines(status);
+            `,
+		},
+		{
+			version: "011_metrics_history",
+			sql: `
+            CREATE TABLE IF NOT EXISTS metrics_history (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                machine_id INTEGER NOT NULL,
+                cpu_pct REAL,
+                mem_used_pct REAL,
+                disk_used_pct REAL,
+                net_rx_bytes INTEGER,
+                net_tx_bytes INTEGER,
+                timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY (machine_id) REFERENCES machines(id) ON DELETE CASCADE
+            );
+            CREATE INDEX IF NOT EXISTS idx_metrics_machine_time ON metrics_history(machine_id, timestamp);
+            `,
+		},
 	}
 
 	// Apply each migration if not already applied
