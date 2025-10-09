@@ -50,6 +50,12 @@
 - [ ] Gate installer publication on passing malware scan + dependency audit *(platform)*
 - [ ] Stand up tamper-evident release ledger with human approver sign-off *(leadership)*
 
+### 7. Guided Support Assistant (AI Chatbot)
+- [ ] Stand up retrieval service with embedded docs/FAQs (RAG) *(platform)*
+- [ ] Build in-app chat UI with guardrails + human handoff *(frontend/backend)*
+- [ ] Instrument chat logging + feedback loop, curate training corpus *(product/docs)*
+- [ ] Stage fine-tuning or prompt updates via review pipeline *(platform/leadership)*
+
 ## 📌 Future Considerations
 - Telegram/email/SMS notification fan-out
 - Web push (browser/mobile) after core channels work
@@ -58,6 +64,7 @@
 - Mobile-friendly control surface (PWA behaviors)
 - Dedicated security status page for customer transparency
 - Private agent beta with hardware-backed attestation
+- AI assistant auto-learning pipeline (post-MVP, opt-in after safety review)
 
 ## 🔐 Security Notes
 - Agents must never open inbound ports; only HTTPS POST to LunaSentri.

@@ -13,6 +13,7 @@ import (
 	"github.com/Constantin-E-T/lunasentri/apps/api-go/internal/auth"
 	"github.com/Constantin-E-T/lunasentri/apps/api-go/internal/config"
 	router "github.com/Constantin-E-T/lunasentri/apps/api-go/internal/http"
+	"github.com/Constantin-E-T/lunasentri/apps/api-go/internal/machines"
 	"github.com/Constantin-E-T/lunasentri/apps/api-go/internal/metrics"
 	"github.com/Constantin-E-T/lunasentri/apps/api-go/internal/notifications"
 	"github.com/Constantin-E-T/lunasentri/apps/api-go/internal/storage"
@@ -137,6 +138,9 @@ func main() {
 	// Initialize alert service with composite notifier
 	alertService := alerts.NewService(store, compositeNotifier)
 
+	// Initialize machine service for agent management
+	machineService := machines.NewService(store)
+
 	// Create HTTP router with all dependencies
 	routerCfg := &router.RouterConfig{
 		Collector:        metricsCollector,
@@ -144,6 +148,7 @@ func main() {
 		AuthService:      authService,
 		AlertService:     alertService,
 		SystemService:    systemService,
+		MachineService:   machineService,
 		Store:            store,
 		WebhookNotifier:  webhookNotifier,
 		TelegramNotifier: telegramNotifier,

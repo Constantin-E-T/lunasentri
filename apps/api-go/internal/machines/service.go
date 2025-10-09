@@ -138,3 +138,60 @@ func (s *Service) GetMetricsHistory(ctx context.Context, machineID, userID int, 
 	// Get metrics history
 	return s.store.GetMetricsHistory(ctx, machine.ID, from, to, limit)
 }
+
+// OfflineThreshold is the duration after which a machine is considered offline
+// if it hasn't reported metrics (default: 2 minutes = 4 missed 30-second intervals)
+const OfflineThreshold = 2 * time.Minute
+
+// IsOnline determines if a machine is online based on its last_seen timestamp
+func IsOnline(lastSeen time.Time) bool {
+	if lastSeen.IsZero() {
+		return false
+	}
+	return time.Since(lastSeen) <= OfflineThreshold
+}
+
+// ComputeStatus determines the status string for a machine based on last_seen
+func ComputeStatus(lastSeen time.Time) string {
+	if IsOnline(lastSeen) {
+		return "online"
+	}
+	return "offline"
+}
+
+// UpdateMachineStatuses checks all machines and updates their status based on last_seen
+// This should be called periodically (e.g., every minute) by a background job
+func (s *Service) UpdateMachineStatuses(ctx context.Context) error {
+	// Note: This would require a new storage method to get all machines
+	// For now, we rely on status being updated when metrics are recorded
+	// Future enhancement: Add a background job to check all machines
+	return nil
+}
+
+// GetMachineWithComputedStatus retrieves a machine and computes its real-time status
+func (s *Service) GetMachineWithComputedStatus(ctx context.Context, machineID, userID int) (*storage.Machine, error) {
+	machine, err := s.GetMachine(ctx, machineID, userID)
+	if err != nil {
+		return nil, err
+	}
+
+	// Compute real-time status
+	machine.Status = ComputeStatus(machine.LastSeen)
+
+	return machine, nil
+}
+
+// ListMachinesWithComputedStatus lists all machines for a user with computed statuses
+func (s *Service) ListMachinesWithComputedStatus(ctx context.Context, userID int) ([]storage.Machine, error) {
+	machines, err := s.ListMachines(ctx, userID)
+	if err != nil {
+		return nil, err
+	}
+
+	// Compute real-time status for each machine
+	for i := range machines {
+		machines[i].Status = ComputeStatus(machines[i].LastSeen)
+	}
+
+	return machines, nil
+}

@@ -12,6 +12,7 @@ import (
 
 	"github.com/Constantin-E-T/lunasentri/apps/api-go/internal/alerts"
 	"github.com/Constantin-E-T/lunasentri/apps/api-go/internal/auth"
+	"github.com/Constantin-E-T/lunasentri/apps/api-go/internal/machines"
 	"github.com/Constantin-E-T/lunasentri/apps/api-go/internal/metrics"
 	"github.com/Constantin-E-T/lunasentri/apps/api-go/internal/notifications"
 	"github.com/Constantin-E-T/lunasentri/apps/api-go/internal/storage"
@@ -42,6 +43,7 @@ type RouterConfig struct {
 	AuthService      *auth.Service
 	AlertService     *alerts.Service
 	SystemService    system.Service
+	MachineService   *machines.Service
 	Store            storage.Store
 	WebhookNotifier  *notifications.Notifier
 	TelegramNotifier *notifications.TelegramNotifier
@@ -156,6 +158,13 @@ func NewRouter(cfg *RouterConfig) *http.ServeMux {
 			}
 		})))
 	}
+
+	// Agent endpoints
+	// POST /agent/register - Session authenticated (user registers a new machine)
+	mux.Handle("/agent/register", cfg.AuthService.RequireAuth(handleAgentRegister(cfg.MachineService)))
+
+	// POST /agent/metrics - API key authenticated (agent pushes metrics)
+	mux.Handle("/agent/metrics", RequireAPIKey(cfg.MachineService)(http.HandlerFunc(handleAgentMetrics(cfg.MachineService))))
 
 	return mux
 }

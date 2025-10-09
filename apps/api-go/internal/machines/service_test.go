@@ -270,3 +270,172 @@ func TestGenerateAPIKey(t *testing.T) {
 		keys[key] = true
 	}
 }
+
+func TestStatusHelpers(t *testing.T) {
+	t.Run("IsOnline", func(t *testing.T) {
+		// Recent timestamp should be online
+		recentTime := time.Now().Add(-30 * time.Second)
+		if !IsOnline(recentTime) {
+			t.Error("Expected recent timestamp to be online")
+		}
+
+		// Old timestamp should be offline
+		oldTime := time.Now().Add(-5 * time.Minute)
+		if IsOnline(oldTime) {
+			t.Error("Expected old timestamp to be offline")
+		}
+
+		// Zero time should be offline
+		if IsOnline(time.Time{}) {
+			t.Error("Expected zero time to be offline")
+		}
+
+		// Boundary test - just under threshold
+		justOnline := time.Now().Add(-OfflineThreshold + 5*time.Second)
+		if !IsOnline(justOnline) {
+			t.Error("Expected timestamp just under threshold to be online")
+		}
+
+		// Boundary test - just over threshold
+		justOffline := time.Now().Add(-OfflineThreshold - 5*time.Second)
+		if IsOnline(justOffline) {
+			t.Error("Expected timestamp just over threshold to be offline")
+		}
+	})
+
+	t.Run("ComputeStatus", func(t *testing.T) {
+		// Recent timestamp should return "online"
+		recentTime := time.Now().Add(-30 * time.Second)
+		if status := ComputeStatus(recentTime); status != "online" {
+			t.Errorf("Expected status 'online', got '%s'", status)
+		}
+
+		// Old timestamp should return "offline"
+		oldTime := time.Now().Add(-5 * time.Minute)
+		if status := ComputeStatus(oldTime); status != "offline" {
+			t.Errorf("Expected status 'offline', got '%s'", status)
+		}
+
+		// Zero time should return "offline"
+		if status := ComputeStatus(time.Time{}); status != "offline" {
+			t.Errorf("Expected status 'offline', got '%s'", status)
+		}
+	})
+}
+
+func TestGetMachineWithComputedStatus(t *testing.T) {
+	// Create a temporary database
+	dbPath := "./test_computed_status.db"
+	defer os.Remove(dbPath)
+
+	store, err := storage.NewSQLiteStore(dbPath)
+	if err != nil {
+		t.Fatalf("Failed to create store: %v", err)
+	}
+	defer store.Close()
+
+	service := NewService(store)
+	ctx := context.Background()
+
+	// Create test user
+	user, err := store.CreateUser(ctx, "status@example.com", "hash")
+	if err != nil {
+		t.Fatalf("Failed to create user: %v", err)
+	}
+
+	// Register machine
+	machine, _, err := service.RegisterMachine(ctx, user.ID, "status-test", "status.local")
+	if err != nil {
+		t.Fatalf("Failed to register machine: %v", err)
+	}
+
+	// Initially should be offline (no metrics yet)
+	retrieved, err := service.GetMachineWithComputedStatus(ctx, machine.ID, user.ID)
+	if err != nil {
+		t.Fatalf("Failed to get machine: %v", err)
+	}
+	if retrieved.Status != "offline" {
+		t.Errorf("Expected status 'offline', got '%s'", retrieved.Status)
+	}
+
+	// Record metrics (should make it online)
+	err = service.RecordMetrics(ctx, machine.ID, 50.0, 60.0, 70.0, 1024, 2048)
+	if err != nil {
+		t.Fatalf("Failed to record metrics: %v", err)
+	}
+
+	// Now should be online
+	retrieved, err = service.GetMachineWithComputedStatus(ctx, machine.ID, user.ID)
+	if err != nil {
+		t.Fatalf("Failed to get machine: %v", err)
+	}
+	if retrieved.Status != "online" {
+		t.Errorf("Expected status 'online', got '%s'", retrieved.Status)
+	}
+}
+
+func TestListMachinesWithComputedStatus(t *testing.T) {
+	// Create a temporary database
+	dbPath := "./test_list_computed_status.db"
+	defer os.Remove(dbPath)
+
+	store, err := storage.NewSQLiteStore(dbPath)
+	if err != nil {
+		t.Fatalf("Failed to create store: %v", err)
+	}
+	defer store.Close()
+
+	service := NewService(store)
+	ctx := context.Background()
+
+	// Create test user
+	user, err := store.CreateUser(ctx, "list@example.com", "hash")
+	if err != nil {
+		t.Fatalf("Failed to create user: %v", err)
+	}
+
+	// Register multiple machines
+	machine1, _, err := service.RegisterMachine(ctx, user.ID, "machine1", "m1.local")
+	if err != nil {
+		t.Fatalf("Failed to register machine1: %v", err)
+	}
+
+	machine2, _, err := service.RegisterMachine(ctx, user.ID, "machine2", "m2.local")
+	if err != nil {
+		t.Fatalf("Failed to register machine2: %v", err)
+	}
+
+	// Record metrics only for machine1
+	err = service.RecordMetrics(ctx, machine1.ID, 50.0, 60.0, 70.0, 1024, 2048)
+	if err != nil {
+		t.Fatalf("Failed to record metrics: %v", err)
+	}
+
+	// List machines with computed status
+	machines, err := service.ListMachinesWithComputedStatus(ctx, user.ID)
+	if err != nil {
+		t.Fatalf("Failed to list machines: %v", err)
+	}
+
+	if len(machines) != 2 {
+		t.Fatalf("Expected 2 machines, got %d", len(machines))
+	}
+
+	// Find machines in the list
+	var m1Status, m2Status string
+	for _, m := range machines {
+		if m.ID == machine1.ID {
+			m1Status = m.Status
+		} else if m.ID == machine2.ID {
+			m2Status = m.Status
+		}
+	}
+
+	// machine1 should be online, machine2 should be offline
+	if m1Status != "online" {
+		t.Errorf("Expected machine1 status 'online', got '%s'", m1Status)
+	}
+	if m2Status != "offline" {
+		t.Errorf("Expected machine2 status 'offline', got '%s'", m2Status)
+	}
+}
