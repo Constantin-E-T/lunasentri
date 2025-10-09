@@ -8,6 +8,12 @@ DB_FILE="$BACKEND_DIR/data/lunasentri.db"
 FRONTEND_PORT="${FRONTEND_PORT:-3000}"
 API_URL="${NEXT_PUBLIC_API_URL:-http://localhost:8080}"
 
+# Load .env file if it exists
+if [ -f "$ROOT_DIR/.env" ]; then
+  echo "Loading environment variables from .env..."
+  export $(grep -v '^#' "$ROOT_DIR/.env" | xargs)
+fi
+
 command -v go >/dev/null 2>&1 || { echo "go is required"; exit 1; }
 command -v pnpm >/dev/null 2>&1 || { echo "pnpm is required"; exit 1; }
 command -v python3 >/dev/null 2>&1 || command -v openssl >/dev/null 2>&1 || { echo "python3 or openssl is required"; exit 1; }
