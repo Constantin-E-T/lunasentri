@@ -1,10 +1,6 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# NOTE: This script requires environment variables to be set in your shell or .env file
-# Particularly M365_CLIENT_SECRET for email functionality
-# See docs/M365-EMAIL-SETUP.md for setup instructions
-
 ROOT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
 BACKEND_DIR="$ROOT_DIR/apps/api-go"
 FRONTEND_DIR="$ROOT_DIR/apps/web-next"
@@ -45,11 +41,7 @@ echo "Starting backend on 8080..."
   AUTH_JWT_SECRET="$AUTH_JWT_SECRET_VALUE" \
   SECURE_COOKIE=false \
   CORS_ALLOWED_ORIGIN="$CORS_ORIGIN" \
-  EMAIL_PROVIDER=m365 \
-  M365_TENANT_ID=c641a056-5f5c-456b-89e0-e4af295de0eb \
-  M365_CLIENT_ID=e34ddbb9-aa61-4286-b889-1deeef17ef95 \
-  M365_CLIENT_SECRET="${M365_CLIENT_SECRET:-<YOUR_CLIENT_SECRET_HERE>}" \
-  M365_SENDER=alerts@conn.digital \
+  TELEGRAM_BOT_TOKEN="${TELEGRAM_BOT_TOKEN:-}" \
   go run main.go
 ) &
 BACKEND_PID=$!

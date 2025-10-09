@@ -175,6 +175,27 @@ func (s *SQLiteStore) migrate() error {
             CREATE INDEX IF NOT EXISTS idx_email_recipients_cooldown ON email_recipients(cooldown_until);
             `,
 		},
+		{
+			version: "009_telegram_recipients",
+			sql: `
+            CREATE TABLE IF NOT EXISTS telegram_recipients (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id INTEGER NOT NULL,
+                chat_id TEXT NOT NULL,
+                is_active BOOLEAN DEFAULT 1,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                last_attempt_at TIMESTAMP,
+                last_success_at TIMESTAMP,
+                last_error_at TIMESTAMP,
+                failure_count INTEGER DEFAULT 0,
+                cooldown_until TIMESTAMP,
+                FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+                UNIQUE(user_id, chat_id)
+            );
+            CREATE INDEX IF NOT EXISTS idx_telegram_recipients_user_id ON telegram_recipients(user_id);
+            CREATE INDEX IF NOT EXISTS idx_telegram_recipients_is_active ON telegram_recipients(is_active);
+            `,
+		},
 	}
 
 	// Apply each migration if not already applied
@@ -1089,6 +1110,206 @@ func (s *SQLiteStore) UpdateEmailDeliveryState(ctx context.Context, id int, last
 	}
 	if rows == 0 {
 		return fmt.Errorf("email recipient with id %d not found", id)
+	}
+
+	return nil
+}
+
+// ListTelegramRecipients returns all Telegram recipients for a user
+func (s *SQLiteStore) ListTelegramRecipients(ctx context.Context, userID int) ([]TelegramRecipient, error) {
+	query := `SELECT id, user_id, chat_id, is_active, created_at, last_attempt_at, last_success_at, last_error_at, failure_count, cooldown_until
+              FROM telegram_recipients
+              WHERE user_id = ?
+              ORDER BY created_at DESC`
+
+	rows, err := s.db.QueryContext(ctx, query, userID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to list telegram recipients: %w", err)
+	}
+	defer rows.Close()
+
+	var recipients []TelegramRecipient
+	for rows.Next() {
+		var r TelegramRecipient
+		err := rows.Scan(&r.ID, &r.UserID, &r.ChatID, &r.IsActive, &r.CreatedAt,
+			&r.LastAttemptAt, &r.LastSuccessAt, &r.LastErrorAt, &r.FailureCount, &r.CooldownUntil)
+		if err != nil {
+			return nil, fmt.Errorf("failed to scan telegram recipient: %w", err)
+		}
+		recipients = append(recipients, r)
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("error iterating telegram recipients: %w", err)
+	}
+
+	return recipients, nil
+}
+
+// GetTelegramRecipient returns a specific Telegram recipient
+func (s *SQLiteStore) GetTelegramRecipient(ctx context.Context, id int, userID int) (*TelegramRecipient, error) {
+	query := `SELECT id, user_id, chat_id, is_active, created_at, last_attempt_at, last_success_at, last_error_at, failure_count, cooldown_until
+              FROM telegram_recipients
+              WHERE id = ? AND user_id = ?`
+
+	var r TelegramRecipient
+	err := s.db.QueryRowContext(ctx, query, id, userID).Scan(&r.ID, &r.UserID, &r.ChatID, &r.IsActive, &r.CreatedAt,
+		&r.LastAttemptAt, &r.LastSuccessAt, &r.LastErrorAt, &r.FailureCount, &r.CooldownUntil)
+
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil, fmt.Errorf("telegram recipient with id %d not found", id)
+		}
+		return nil, fmt.Errorf("failed to get telegram recipient: %w", err)
+	}
+
+	return &r, nil
+}
+
+// CreateTelegramRecipient creates a new Telegram recipient
+func (s *SQLiteStore) CreateTelegramRecipient(ctx context.Context, userID int, chatID string) (*TelegramRecipient, error) {
+	query := `INSERT INTO telegram_recipients (user_id, chat_id, is_active, created_at, failure_count)
+              VALUES (?, ?, 1, ?, 0)`
+
+	now := time.Now()
+	res, err := s.db.ExecContext(ctx, query, userID, chatID, now)
+	if err != nil {
+		if strings.Contains(err.Error(), "UNIQUE constraint failed") {
+			return nil, fmt.Errorf("telegram recipient with chat_id %s already exists", chatID)
+		}
+		return nil, fmt.Errorf("failed to create telegram recipient: %w", err)
+	}
+
+	id, err := res.LastInsertId()
+	if err != nil {
+		return nil, fmt.Errorf("failed to get last insert id: %w", err)
+	}
+
+	return s.GetTelegramRecipient(ctx, int(id), userID)
+}
+
+// UpdateTelegramRecipient updates a Telegram recipient
+func (s *SQLiteStore) UpdateTelegramRecipient(ctx context.Context, id int, userID int, chatID string, isActive *bool) (*TelegramRecipient, error) {
+	var updates []string
+	var args []interface{}
+
+	if chatID != "" {
+		updates = append(updates, "chat_id = ?")
+		args = append(args, chatID)
+	}
+
+	if isActive != nil {
+		updates = append(updates, "is_active = ?")
+		args = append(args, *isActive)
+	}
+
+	if len(updates) == 0 {
+		return s.GetTelegramRecipient(ctx, id, userID)
+	}
+
+	// Add WHERE clause parameters
+	args = append(args, id, userID)
+
+	query := fmt.Sprintf("UPDATE telegram_recipients SET %s WHERE id = ? AND user_id = ?",
+		strings.Join(updates, ", "))
+
+	res, err := s.db.ExecContext(ctx, query, args...)
+	if err != nil {
+		return nil, fmt.Errorf("failed to update telegram recipient: %w", err)
+	}
+
+	rows, err := res.RowsAffected()
+	if err != nil {
+		return nil, fmt.Errorf("failed to verify telegram recipient update: %w", err)
+	}
+	if rows == 0 {
+		return nil, fmt.Errorf("telegram recipient with id %d not found or unauthorized", id)
+	}
+
+	return s.GetTelegramRecipient(ctx, id, userID)
+}
+
+// DeleteTelegramRecipient deletes a Telegram recipient
+func (s *SQLiteStore) DeleteTelegramRecipient(ctx context.Context, id int, userID int) error {
+	query := `DELETE FROM telegram_recipients WHERE id = ? AND user_id = ?`
+
+	res, err := s.db.ExecContext(ctx, query, id, userID)
+	if err != nil {
+		return fmt.Errorf("failed to delete telegram recipient: %w", err)
+	}
+
+	rows, err := res.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("failed to verify telegram recipient deletion: %w", err)
+	}
+	if rows == 0 {
+		return fmt.Errorf("telegram recipient with id %d not found or unauthorized", id)
+	}
+
+	return nil
+}
+
+// IncrementTelegramFailure increments failure count and sets last error time
+func (s *SQLiteStore) IncrementTelegramFailure(ctx context.Context, id int, lastErrorAt time.Time) error {
+	query := `UPDATE telegram_recipients
+              SET failure_count = failure_count + 1, last_error_at = ?
+              WHERE id = ?`
+
+	res, err := s.db.ExecContext(ctx, query, lastErrorAt, id)
+	if err != nil {
+		return fmt.Errorf("failed to increment telegram failure: %w", err)
+	}
+
+	rows, err := res.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("failed to verify failure increment: %w", err)
+	}
+	if rows == 0 {
+		return fmt.Errorf("telegram recipient with id %d not found", id)
+	}
+
+	return nil
+}
+
+// MarkTelegramSuccess resets failure count and sets last success time
+func (s *SQLiteStore) MarkTelegramSuccess(ctx context.Context, id int, lastSuccessAt time.Time) error {
+	query := `UPDATE telegram_recipients
+              SET failure_count = 0, last_success_at = ?
+              WHERE id = ?`
+
+	res, err := s.db.ExecContext(ctx, query, lastSuccessAt, id)
+	if err != nil {
+		return fmt.Errorf("failed to mark telegram success: %w", err)
+	}
+
+	rows, err := res.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("failed to verify success update: %w", err)
+	}
+	if rows == 0 {
+		return fmt.Errorf("telegram recipient with id %d not found", id)
+	}
+
+	return nil
+}
+
+// UpdateTelegramDeliveryState updates last attempt time and cooldown
+func (s *SQLiteStore) UpdateTelegramDeliveryState(ctx context.Context, id int, lastAttemptAt time.Time, cooldownUntil *time.Time) error {
+	query := `UPDATE telegram_recipients
+              SET last_attempt_at = ?, cooldown_until = ?
+              WHERE id = ?`
+
+	res, err := s.db.ExecContext(ctx, query, lastAttemptAt, cooldownUntil, id)
+	if err != nil {
+		return fmt.Errorf("failed to update telegram delivery state: %w", err)
+	}
+
+	rows, err := res.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("failed to verify delivery state update: %w", err)
+	}
+	if rows == 0 {
+		return fmt.Errorf("telegram recipient with id %d not found", id)
 	}
 
 	return nil

@@ -15,6 +15,7 @@ import (
 
 	"github.com/Constantin-E-T/lunasentri/apps/api-go/internal/alerts"
 	"github.com/Constantin-E-T/lunasentri/apps/api-go/internal/auth"
+	"github.com/Constantin-E-T/lunasentri/apps/api-go/internal/config"
 	"github.com/Constantin-E-T/lunasentri/apps/api-go/internal/metrics"
 	"github.com/Constantin-E-T/lunasentri/apps/api-go/internal/notifications"
 	"github.com/Constantin-E-T/lunasentri/apps/api-go/internal/storage"
@@ -641,7 +642,7 @@ func handleSystemInfo(systemService system.Service) http.HandlerFunc {
 }
 
 // newServer creates a new HTTP server with the given collector, auth service, alert service, and system service
-func newServer(collector metrics.Collector, startTime time.Time, authService *auth.Service, alertService *alerts.Service, systemService system.Service, store storage.Store, webhookNotifier *notifications.Notifier, accessTTL time.Duration, passwordResetTTL time.Duration, secureCookie bool) *http.ServeMux {
+func newServer(collector metrics.Collector, startTime time.Time, authService *auth.Service, alertService *alerts.Service, systemService system.Service, store storage.Store, webhookNotifier *notifications.Notifier, telegramNotifier *notifications.TelegramNotifier, accessTTL time.Duration, passwordResetTTL time.Duration, secureCookie bool) *http.ServeMux {
 	// Create a new ServeMux
 	mux := http.NewServeMux()
 
@@ -744,6 +745,32 @@ func newServer(collector metrics.Collector, startTime time.Time, authService *au
 			http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
 		}
 	})))
+
+	// Telegram notification endpoints (protected)
+	if telegramNotifier != nil {
+		mux.Handle("/notifications/telegram", authService.RequireAuth(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if r.Method == http.MethodGet {
+				notifications.HandleListTelegramRecipients(store)(w, r)
+			} else if r.Method == http.MethodPost {
+				notifications.HandleCreateTelegramRecipient(store)(w, r)
+			} else {
+				http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+			}
+		})))
+		mux.Handle("/notifications/telegram/", authService.RequireAuth(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if strings.HasSuffix(r.URL.Path, "/test") && r.Method == http.MethodPost {
+				notifications.HandleTestTelegram(store, telegramNotifier)(w, r)
+				return
+			}
+			if r.Method == http.MethodPut {
+				notifications.HandleUpdateTelegramRecipient(store)(w, r)
+			} else if r.Method == http.MethodDelete {
+				notifications.HandleDeleteTelegramRecipient(store)(w, r)
+			} else {
+				http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+			}
+		})))
+	}
 
 	return mux
 }
@@ -1073,17 +1100,33 @@ func main() {
 	// Initialize system service
 	systemService := system.NewSystemService()
 
+	// Load Telegram configuration
+	telegramConfig, err := config.LoadTelegramConfig()
+	if err != nil {
+		log.Println("Telegram notifications disabled:", err)
+		telegramConfig = nil
+	}
+	if telegramConfig != nil && telegramConfig.IsEnabled() {
+		log.Println("Telegram notifications enabled")
+	}
+
 	// Initialize webhook notifier
 	webhookNotifier := notifications.NewNotifier(store, log.Default())
 
+	// Initialize Telegram notifier
+	var telegramNotifier *notifications.TelegramNotifier
+	if telegramConfig != nil && telegramConfig.IsEnabled() {
+		telegramNotifier = notifications.NewTelegramNotifier(store, telegramConfig, log.Default())
+	}
+
 	// Create composite notifier that fans out to all channels
-	compositeNotifier := notifications.NewCompositeNotifier(log.Default(), webhookNotifier)
+	compositeNotifier := notifications.NewCompositeNotifier(log.Default(), webhookNotifier, telegramNotifier)
 
 	// Initialize alert service with composite notifier
 	alertService := alerts.NewService(store, compositeNotifier)
 
 	// Create server with real collector, auth service, alert service, and system service
-	mux := newServer(metricsCollector, serverStartTime, authService, alertService, systemService, store, webhookNotifier, accessTTL, passwordResetTTL, secureCookie)
+	mux := newServer(metricsCollector, serverStartTime, authService, alertService, systemService, store, webhookNotifier, telegramNotifier, accessTTL, passwordResetTTL, secureCookie)
 
 	// Create HTTP server with CORS middleware
 	port := "8080"

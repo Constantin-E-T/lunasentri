@@ -157,6 +157,30 @@ func (m *mockStore) MarkEmailSuccess(ctx context.Context, id int, lastSuccessAt 
 func (m *mockStore) UpdateEmailDeliveryState(ctx context.Context, id int, lastAttemptAt time.Time, cooldownUntil *time.Time) error {
 	return fmt.Errorf("not implemented")
 }
+func (m *mockStore) ListTelegramRecipients(ctx context.Context, userID int) ([]storage.TelegramRecipient, error) {
+	return nil, fmt.Errorf("not implemented")
+}
+func (m *mockStore) GetTelegramRecipient(ctx context.Context, id int, userID int) (*storage.TelegramRecipient, error) {
+	return nil, fmt.Errorf("not implemented")
+}
+func (m *mockStore) CreateTelegramRecipient(ctx context.Context, userID int, chatID string) (*storage.TelegramRecipient, error) {
+	return nil, fmt.Errorf("not implemented")
+}
+func (m *mockStore) UpdateTelegramRecipient(ctx context.Context, id int, userID int, chatID string, isActive *bool) (*storage.TelegramRecipient, error) {
+	return nil, fmt.Errorf("not implemented")
+}
+func (m *mockStore) DeleteTelegramRecipient(ctx context.Context, id int, userID int) error {
+	return fmt.Errorf("not implemented")
+}
+func (m *mockStore) IncrementTelegramFailure(ctx context.Context, id int, lastErrorAt time.Time) error {
+	return fmt.Errorf("not implemented")
+}
+func (m *mockStore) MarkTelegramSuccess(ctx context.Context, id int, lastSuccessAt time.Time) error {
+	return fmt.Errorf("not implemented")
+}
+func (m *mockStore) UpdateTelegramDeliveryState(ctx context.Context, id int, lastAttemptAt time.Time, cooldownUntil *time.Time) error {
+	return fmt.Errorf("not implemented")
+}
 func (m *mockStore) Close() error {
 	return nil
 }

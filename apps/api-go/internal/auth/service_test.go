@@ -261,6 +261,38 @@ func (m *mockStore) UpdateEmailDeliveryState(ctx context.Context, id int, lastAt
 	return nil
 }
 
+func (m *mockStore) ListTelegramRecipients(ctx context.Context, userID int) ([]storage.TelegramRecipient, error) {
+	return []storage.TelegramRecipient{}, nil
+}
+
+func (m *mockStore) GetTelegramRecipient(ctx context.Context, id int, userID int) (*storage.TelegramRecipient, error) {
+	return &storage.TelegramRecipient{ID: id, UserID: userID, ChatID: "123456789", IsActive: true}, nil
+}
+
+func (m *mockStore) CreateTelegramRecipient(ctx context.Context, userID int, chatID string) (*storage.TelegramRecipient, error) {
+	return &storage.TelegramRecipient{ID: 1, UserID: userID, ChatID: chatID, IsActive: true}, nil
+}
+
+func (m *mockStore) UpdateTelegramRecipient(ctx context.Context, id int, userID int, chatID string, isActive *bool) (*storage.TelegramRecipient, error) {
+	return &storage.TelegramRecipient{ID: id, UserID: userID, ChatID: chatID, IsActive: true}, nil
+}
+
+func (m *mockStore) DeleteTelegramRecipient(ctx context.Context, id int, userID int) error {
+	return nil
+}
+
+func (m *mockStore) IncrementTelegramFailure(ctx context.Context, id int, lastErrorAt time.Time) error {
+	return nil
+}
+
+func (m *mockStore) MarkTelegramSuccess(ctx context.Context, id int, lastSuccessAt time.Time) error {
+	return nil
+}
+
+func (m *mockStore) UpdateTelegramDeliveryState(ctx context.Context, id int, lastAttemptAt time.Time, cooldownUntil *time.Time) error {
+	return nil
+}
+
 func (m *mockStore) Close() error {
 	return nil
 }

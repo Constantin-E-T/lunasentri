@@ -109,7 +109,7 @@ func TestSystemInfoHandler(t *testing.T) {
 	}
 
 	// Create server
-	mux := newServer(collector, time.Now(), authService, alertService, systemService, store, notifier, 15*time.Minute, 15*time.Minute, false)
+	mux := newServer(collector, time.Now(), authService, alertService, systemService, store, notifier, nil, 15*time.Minute, 15*time.Minute, false)
 	server := httptest.NewServer(corsMiddleware(mux))
 	defer server.Close()
 
@@ -172,7 +172,7 @@ func TestSystemInfoHandlerError(t *testing.T) {
 	}
 
 	// Create server
-	mux := newServer(collector, time.Now(), authService, alertService, systemService, store, notifier, 15*time.Minute, 15*time.Minute, false)
+	mux := newServer(collector, time.Now(), authService, alertService, systemService, store, notifier, nil, 15*time.Minute, 15*time.Minute, false)
 	server := httptest.NewServer(corsMiddleware(mux))
 	defer server.Close()
 
@@ -209,7 +209,7 @@ func TestSystemInfoHandlerMethodNotAllowed(t *testing.T) {
 	}
 
 	// Create server
-	mux := newServer(collector, time.Now(), authService, alertService, systemService, store, notifier, 15*time.Minute, 15*time.Minute, false)
+	mux := newServer(collector, time.Now(), authService, alertService, systemService, store, notifier, nil, 15*time.Minute, 15*time.Minute, false)
 	server := httptest.NewServer(corsMiddleware(mux))
 	defer server.Close()
 

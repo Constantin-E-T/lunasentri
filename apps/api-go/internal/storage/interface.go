@@ -94,6 +94,16 @@ type Store interface {
 	MarkEmailSuccess(ctx context.Context, id int, lastSuccessAt time.Time) error
 	UpdateEmailDeliveryState(ctx context.Context, id int, lastAttemptAt time.Time, cooldownUntil *time.Time) error
 
+	// Telegram recipient methods
+	ListTelegramRecipients(ctx context.Context, userID int) ([]TelegramRecipient, error)
+	GetTelegramRecipient(ctx context.Context, id int, userID int) (*TelegramRecipient, error)
+	CreateTelegramRecipient(ctx context.Context, userID int, chatID string) (*TelegramRecipient, error)
+	UpdateTelegramRecipient(ctx context.Context, id int, userID int, chatID string, isActive *bool) (*TelegramRecipient, error)
+	DeleteTelegramRecipient(ctx context.Context, id int, userID int) error
+	IncrementTelegramFailure(ctx context.Context, id int, lastErrorAt time.Time) error
+	MarkTelegramSuccess(ctx context.Context, id int, lastSuccessAt time.Time) error
+	UpdateTelegramDeliveryState(ctx context.Context, id int, lastAttemptAt time.Time, cooldownUntil *time.Time) error
+
 	// Close closes the storage connection
 	Close() error
 }
@@ -159,4 +169,18 @@ type EmailRecipient struct {
 	LastAttemptAt *time.Time `json:"last_attempt_at"` // Last delivery attempt for rate limiting
 	CreatedAt     time.Time  `json:"created_at"`
 	UpdatedAt     time.Time  `json:"updated_at"`
+}
+
+// TelegramRecipient represents a Telegram chat that receives alert notifications
+type TelegramRecipient struct {
+	ID            int        `json:"id"`
+	UserID        int        `json:"user_id"`
+	ChatID        string     `json:"chat_id"`
+	IsActive      bool       `json:"is_active"`
+	CreatedAt     time.Time  `json:"created_at"`
+	LastAttemptAt *time.Time `json:"last_attempt_at,omitempty"`
+	LastSuccessAt *time.Time `json:"last_success_at,omitempty"`
+	LastErrorAt   *time.Time `json:"last_error_at,omitempty"`
+	FailureCount  int        `json:"failure_count"`
+	CooldownUntil *time.Time `json:"cooldown_until,omitempty"`
 }
