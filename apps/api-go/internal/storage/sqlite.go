@@ -318,18 +318,37 @@ func (s *SQLiteStore) UpsertAdmin(ctx context.Context, email, passwordHash strin
 	// Try to get existing user first
 	existingUser, err := s.GetUserByEmail(ctx, email)
 	if err != nil {
-		// User doesn't exist, create new one
-		if strings.Contains(err.Error(), "not found") {
-			return s.CreateUser(ctx, email, passwordHash)
-		}
-		if errors.Is(err, ErrUserNotFound) {
-			return s.CreateUser(ctx, email, passwordHash)
+		// User doesn't exist, create new admin user
+		if strings.Contains(err.Error(), "not found") || errors.Is(err, ErrUserNotFound) {
+			query := `
+			INSERT INTO users (email, password_hash, is_admin, created_at)
+			VALUES (?, ?, ?, ?)
+			RETURNING id, email, password_hash, is_admin, created_at`
+
+			now := time.Now()
+			user := &User{}
+
+			err := s.db.QueryRowContext(ctx, query, email, passwordHash, true, now).Scan(
+				&user.ID,
+				&user.Email,
+				&user.PasswordHash,
+				&user.IsAdmin,
+				&user.CreatedAt,
+			)
+			if err != nil {
+				if strings.Contains(err.Error(), "UNIQUE constraint failed: users.email") {
+					return nil, fmt.Errorf("user with email %s already exists", email)
+				}
+				return nil, fmt.Errorf("failed to create admin user: %w", err)
+			}
+
+			return user, nil
 		}
 		return nil, fmt.Errorf("failed to check existing user: %w", err)
 	}
 
-	// User exists, update password hash
-	query := `UPDATE users SET password_hash = ? WHERE email = ?`
+	// User exists, update password hash and ensure is_admin is true
+	query := `UPDATE users SET password_hash = ?, is_admin = 1 WHERE email = ?`
 	_, err = s.db.ExecContext(ctx, query, passwordHash, email)
 	if err != nil {
 		return nil, fmt.Errorf("failed to update user password: %w", err)
@@ -337,6 +356,7 @@ func (s *SQLiteStore) UpsertAdmin(ctx context.Context, email, passwordHash strin
 
 	// Return updated user
 	existingUser.PasswordHash = passwordHash
+	existingUser.IsAdmin = true
 	return existingUser, nil
 }
 
