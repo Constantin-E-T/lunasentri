@@ -87,7 +87,11 @@ func (n *Notifier) Send(ctx context.Context, rule storage.AlertRule, event stora
 	// Send to all webhooks concurrently
 	for _, webhook := range webhooks {
 		go func(w storage.Webhook) {
-			if err := n.sendToWebhook(ctx, w, payload); err != nil {
+			// Create independent context to avoid cancellation from parent
+			sendCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+			defer cancel()
+
+			if err := n.sendToWebhook(sendCtx, w, payload); err != nil {
 				n.logger.Printf("Failed to send webhook to %s: %v", w.URL, err)
 			}
 		}(webhook)

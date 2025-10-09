@@ -55,7 +55,11 @@ func (t *TelegramNotifier) Send(ctx context.Context, rule storage.AlertRule, eve
 
 	for _, recipient := range recipients {
 		go func(r storage.TelegramRecipient) {
-			if err := t.sendToRecipient(ctx, r, message); err != nil {
+			// Create independent context to avoid cancellation from parent
+			sendCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+			defer cancel()
+
+			if err := t.sendToRecipient(sendCtx, r, message); err != nil {
 				t.logger.Printf("[TELEGRAM] failed to send to chat_id=%s: %v", r.ChatID, err)
 			}
 		}(recipient)
@@ -107,9 +111,8 @@ func (t *TelegramNotifier) sendToRecipient(ctx context.Context, recipient storag
 	apiURL := fmt.Sprintf(TelegramAPIURL, t.config.BotToken)
 
 	payload := map[string]interface{}{
-		"chat_id":    recipient.ChatID,
-		"text":       message,
-		"parse_mode": "Markdown",
+		"chat_id": recipient.ChatID,
+		"text":    message,
 	}
 
 	payloadBytes, err := json.Marshal(payload)
@@ -156,14 +159,15 @@ func (t *TelegramNotifier) buildAlertMessage(rule storage.AlertRule, event stora
 		comparisonText = "below"
 	}
 
+	// Use plain text instead of Markdown to avoid parsing issues
 	return fmt.Sprintf(
-		"🚨 *LunaSentri Alert*\n\n"+
-			"*Rule:* %s\n"+
-			"*Metric:* %s\n"+
-			"*Condition:* %s %.1f%%\n"+
-			"*Current Value:* %.1f%%\n"+
-			"*Triggered:* %s\n\n"+
-			"_Alert triggered after %d consecutive samples_",
+		"🚨 LunaSentri Alert\n\n"+
+			"Rule: %s\n"+
+			"Metric: %s\n"+
+			"Condition: %s %.1f%%\n"+
+			"Current Value: %.1f%%\n"+
+			"Triggered: %s\n\n"+
+			"Alert triggered after %d consecutive samples",
 		rule.Name,
 		rule.Metric,
 		comparisonText,
