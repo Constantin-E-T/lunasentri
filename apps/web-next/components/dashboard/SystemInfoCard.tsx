@@ -2,6 +2,7 @@
 
 import { useSystemInfo } from "@/lib/useSystemInfo";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
 import {
   Server,
   Cpu,
@@ -41,8 +42,16 @@ function formatTimestamp(timestamp: number): string {
   return date.toLocaleString();
 }
 
-export function SystemInfoCard() {
-  const { systemInfo, loading, error } = useSystemInfo();
+export interface SystemInfoCardProps {
+  /**
+   * Machine ID to fetch system info for.
+   * If not provided, fetches localhost system info.
+   */
+  machineId?: number;
+}
+
+export function SystemInfoCard({ machineId }: SystemInfoCardProps) {
+  const { systemInfo, loading, error } = useSystemInfo({ machineId });
 
   if (loading) {
     return (
@@ -87,10 +96,20 @@ export function SystemInfoCard() {
   return (
     <Card className="w-full bg-card/70 border border-border/30 backdrop-blur-xl shadow-2xl transition-all duration-300 hover:-translate-y-1 hover:shadow-[0_20px_60px_rgba(20,40,120,0.35)]">
       <CardHeader className="pb-4">
-        <CardTitle className="flex items-center gap-2 text-foreground">
-          <Server className="h-5 w-5" />
-          System Information
-        </CardTitle>
+        <div className="flex items-center justify-between">
+          <CardTitle className="flex items-center gap-2 text-foreground">
+            <Server className="h-5 w-5" />
+            System Information
+          </CardTitle>
+          {!machineId && (
+            <Badge
+              variant="outline"
+              className="text-[10px] px-1.5 py-0 border-yellow-500/40 text-yellow-500"
+            >
+              Dev Only
+            </Badge>
+          )}
+        </div>
       </CardHeader>
       <CardContent className="space-y-4">
         <div className="space-y-3">

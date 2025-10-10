@@ -2,6 +2,7 @@
 
 import { useMetrics } from "@/lib/useMetrics";
 import { MetricSparkline } from "@/components/dashboard";
+import { Badge } from "@/components/ui/badge";
 import {
   getMetricSeverity,
   getSeverityStyles,
@@ -65,7 +66,15 @@ function ConnectionStatus({
   );
 }
 
-export function MetricsCard() {
+export interface MetricsCardProps {
+  /**
+   * Machine ID to fetch metrics for.
+   * If not provided, fetches localhost metrics.
+   */
+  machineId?: number;
+}
+
+export function MetricsCard({ machineId }: MetricsCardProps) {
   const {
     metrics,
     error,
@@ -74,7 +83,7 @@ export function MetricsCard() {
     lastUpdate,
     retry,
     history,
-  } = useMetrics();
+  } = useMetrics({ machineId });
 
   if (loading) {
     return (
@@ -113,9 +122,19 @@ export function MetricsCard() {
     <div className="w-full rounded-2xl bg-card/70 border border-border/30 backdrop-blur-xl shadow-2xl p-8 min-h-[400px] transition-all duration-300 hover:-translate-y-1 hover:shadow-[0_20px_60px_rgba(20,40,120,0.35)]">
       <div className="flex justify-between items-center mb-6">
         <div className="text-left">
-          <p className="text-xs uppercase tracking-[0.25em] text-muted-foreground">
-            Orbital Feed
-          </p>
+          <div className="flex items-center gap-2">
+            <p className="text-xs uppercase tracking-[0.25em] text-muted-foreground">
+              Orbital Feed
+            </p>
+            {!machineId && (
+              <Badge
+                variant="outline"
+                className="text-[10px] px-1.5 py-0 border-yellow-500/40 text-yellow-500"
+              >
+                Dev Only
+              </Badge>
+            )}
+          </div>
           <h2 className="text-2xl font-semibold text-foreground">
             Live Metrics
           </h2>

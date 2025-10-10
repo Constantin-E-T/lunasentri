@@ -13,6 +13,12 @@ export interface MetricSample {
 
 export interface UseMetricsOptions {
     /**
+     * Machine ID to fetch metrics for.
+     * If not provided, falls back to localhost metrics (if LOCAL_HOST_METRICS is enabled).
+     */
+    machineId?: number;
+
+    /**
      * WebSocket URL for real-time streaming.
      * If not provided, falls back to polling.
      */
@@ -60,7 +66,7 @@ export interface UseMetricsReturn {
     history: MetricSample[];
 }
 
-const DEFAULT_OPTIONS: Required<UseMetricsOptions> = {
+const DEFAULT_OPTIONS: Required<Omit<UseMetricsOptions, 'machineId'>> = {
     wsUrl: '',
     pollInterval: 5000,
     maxReconnectAttempts: 3,
@@ -71,19 +77,27 @@ const DEFAULT_OPTIONS: Required<UseMetricsOptions> = {
  * Hook for fetching metrics with WebSocket streaming and polling fallback.
  * 
  * Features:
+ * - Machine-specific or localhost metrics
  * - Automatic WebSocket connection with fallback to polling
  * - Automatic reconnection on WebSocket failures
  * - Graceful degradation when WebSocket is unavailable
  * - Real-time updates every ~3s via WebSocket
  * - Manual retry capability
+ * 
+ * @param options - Configuration options including optional machineId
  */
 export function useMetrics(options: UseMetricsOptions = {}): UseMetricsReturn {
     const opts = { ...DEFAULT_OPTIONS, ...options };
+    const { machineId } = options;
 
-    // Determine WebSocket URL
+    // Determine WebSocket URL with machine_id parameter if provided
     const wsUrl = opts.wsUrl || (() => {
         const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8080';
-        return apiUrl.replace(/^http/, 'ws') + '/ws';
+        const baseWsUrl = apiUrl.replace(/^http/, 'ws') + '/ws';
+        if (machineId !== undefined) {
+            return `${baseWsUrl}?machine_id=${machineId}`;
+        }
+        return baseWsUrl;
     })();
 
     // State
@@ -209,7 +223,7 @@ export function useMetrics(options: UseMetricsOptions = {}): UseMetricsReturn {
         if (!isMountedRef.current) return;
 
         try {
-            const data = await fetchMetrics();
+            const data = await fetchMetrics(machineId);
             if (isMountedRef.current) {
                 updateMetricsAndHistory(data);
                 setConnectionType('polling');
@@ -231,7 +245,7 @@ export function useMetrics(options: UseMetricsOptions = {}): UseMetricsReturn {
         if (isMountedRef.current) {
             pollTimeoutRef.current = setTimeout(poll, opts.pollInterval);
         }
-    }, [opts.pollInterval, updateMetricsAndHistory]);
+    }, [opts.pollInterval, updateMetricsAndHistory, machineId]);
 
     // Start polling fallback
     const startPolling = useCallback(() => {

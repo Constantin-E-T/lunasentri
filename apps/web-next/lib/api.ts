@@ -129,12 +129,39 @@ async function requestVoid(input: RequestInfo | URL, init?: RequestInit): Promis
   }
 }
 
-export async function fetchMetrics(): Promise<Metrics> {
-  return request<Metrics>(`${API_URL}/metrics`);
+/**
+ * Fetch metrics for a specific machine or localhost.
+ * 
+ * @param machineId - Optional machine ID. If provided, fetches metrics for that machine.
+ *                    If omitted and LOCAL_HOST_METRICS is enabled, fetches localhost metrics.
+ * 
+ * TODO: Backend needs to implement machine-specific metrics retrieval.
+ * Current behavior: Always returns localhost metrics when LOCAL_HOST_METRICS=true,
+ * returns error when LOCAL_HOST_METRICS=false regardless of machineId.
+ */
+export async function fetchMetrics(machineId?: number): Promise<Metrics> {
+  const url = new URL(`${API_URL}/metrics`);
+  if (machineId !== undefined) {
+    url.searchParams.set('machine_id', machineId.toString());
+  }
+  return request<Metrics>(url.toString());
 }
 
-export async function fetchSystemInfo(): Promise<SystemInfo> {
-  return request<SystemInfo>(`${API_URL}/system/info`);
+/**
+ * Fetch system info for a specific machine or localhost.
+ * 
+ * @param machineId - Optional machine ID. If provided, fetches info for that machine.
+ *                    If omitted, fetches localhost info.
+ * 
+ * TODO: Backend needs to implement machine-specific system info retrieval.
+ * Current behavior: Always returns localhost info regardless of machineId.
+ */
+export async function fetchSystemInfo(machineId?: number): Promise<SystemInfo> {
+  const url = new URL(`${API_URL}/system/info`);
+  if (machineId !== undefined) {
+    url.searchParams.set('machine_id', machineId.toString());
+  }
+  return request<SystemInfo>(url.toString());
 }
 
 export async function login(email: string, password: string): Promise<User> {

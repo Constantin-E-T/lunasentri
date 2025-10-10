@@ -3,6 +3,14 @@
 import { useEffect, useState, useRef } from 'react';
 import { fetchSystemInfo, type SystemInfo } from './api';
 
+export interface UseSystemInfoOptions {
+    /**
+     * Machine ID to fetch system info for.
+     * If not provided, fetches localhost system info.
+     */
+    machineId?: number;
+}
+
 export interface UseSystemInfoReturn {
     /** Current system info data */
     systemInfo: SystemInfo | null;
@@ -17,7 +25,8 @@ export interface UseSystemInfoReturn {
     refetch: () => Promise<void>;
 }
 
-export function useSystemInfo(): UseSystemInfoReturn {
+export function useSystemInfo(options: UseSystemInfoOptions = {}): UseSystemInfoReturn {
+    const { machineId } = options;
     const [systemInfo, setSystemInfo] = useState<SystemInfo | null>(null);
     const [error, setError] = useState<string | null>(null);
     const [loading, setLoading] = useState(true);
@@ -26,7 +35,7 @@ export function useSystemInfo(): UseSystemInfoReturn {
     const fetchData = async () => {
         try {
             setError(null);
-            const data = await fetchSystemInfo();
+            const data = await fetchSystemInfo(machineId);
 
             if (isMountedRef.current) {
                 setSystemInfo(data);
@@ -55,7 +64,7 @@ export function useSystemInfo(): UseSystemInfoReturn {
         return () => {
             isMountedRef.current = false;
         };
-    }, []);
+    }, [machineId]); // Refetch when machineId changes
 
     return {
         systemInfo,
