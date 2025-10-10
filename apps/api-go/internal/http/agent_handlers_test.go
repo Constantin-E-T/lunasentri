@@ -185,12 +185,33 @@ func TestAgentMetrics(t *testing.T) {
 	}
 
 	t.Run("successful metrics ingestion", func(t *testing.T) {
+		hostname := "agent-host"
+		platform := "linux"
+		platformVersion := "ubuntu 22.04"
+		kernel := "6.2.0"
+		cpuCores := 8
+		memory := int64(32768)
+		disk := int64(512)
+		lastBoot := time.Now().Add(-2 * time.Hour).UTC()
+		uptime := 7200.0
+
 		req := AgentMetricsRequest{
 			CPUPct:      45.5,
 			MemUsedPct:  67.8,
 			DiskUsedPct: 23.1,
 			NetRxBytes:  1024,
 			NetTxBytes:  2048,
+			UptimeS:     &uptime,
+			SystemInfo: &AgentSystemInfoPayload{
+				Hostname:        &hostname,
+				Platform:        &platform,
+				PlatformVersion: &platformVersion,
+				KernelVersion:   &kernel,
+				CPUCores:        &cpuCores,
+				MemoryTotalMB:   &memory,
+				DiskTotalGB:     &disk,
+				LastBootTime:    &lastBoot,
+			},
 		}
 		body, _ := json.Marshal(req)
 
@@ -218,6 +239,9 @@ func TestAgentMetrics(t *testing.T) {
 		if metrics.MemUsedPct != 67.8 {
 			t.Errorf("Expected memory 67.8, got %.1f", metrics.MemUsedPct)
 		}
+		if metrics.UptimeSeconds != uptime {
+			t.Errorf("Expected uptime %.0f, got %.0f", uptime, metrics.UptimeSeconds)
+		}
 
 		// Verify machine status was updated to online
 		updatedMachine, err := store.GetMachineByID(context.Background(), machine.ID)
@@ -226,6 +250,30 @@ func TestAgentMetrics(t *testing.T) {
 		}
 		if updatedMachine.Status != "online" {
 			t.Errorf("Expected status 'online', got '%s'", updatedMachine.Status)
+		}
+		if updatedMachine.Hostname != hostname {
+			t.Errorf("Expected hostname %s, got %s", hostname, updatedMachine.Hostname)
+		}
+		if updatedMachine.Platform != platform {
+			t.Errorf("Expected platform %s, got %s", platform, updatedMachine.Platform)
+		}
+		if updatedMachine.PlatformVersion != platformVersion {
+			t.Errorf("Expected platform version %s, got %s", platformVersion, updatedMachine.PlatformVersion)
+		}
+		if updatedMachine.KernelVersion != kernel {
+			t.Errorf("Expected kernel %s, got %s", kernel, updatedMachine.KernelVersion)
+		}
+		if updatedMachine.CPUCores != cpuCores {
+			t.Errorf("Expected cpu cores %d, got %d", cpuCores, updatedMachine.CPUCores)
+		}
+		if updatedMachine.MemoryTotalMB != memory {
+			t.Errorf("Expected memory total %d, got %d", memory, updatedMachine.MemoryTotalMB)
+		}
+		if updatedMachine.DiskTotalGB != disk {
+			t.Errorf("Expected disk total %d, got %d", disk, updatedMachine.DiskTotalGB)
+		}
+		if updatedMachine.LastBootTime.IsZero() {
+			t.Errorf("Expected last boot time to be set")
 		}
 	})
 

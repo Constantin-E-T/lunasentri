@@ -232,6 +232,19 @@ func (s *SQLiteStore) migrate() error {
             CREATE INDEX IF NOT EXISTS idx_metrics_machine_time ON metrics_history(machine_id, timestamp);
             `,
 		},
+		{
+			version: "012_machine_system_info",
+			sql: `
+            ALTER TABLE machines ADD COLUMN platform TEXT;
+            ALTER TABLE machines ADD COLUMN platform_version TEXT;
+            ALTER TABLE machines ADD COLUMN kernel_version TEXT;
+            ALTER TABLE machines ADD COLUMN cpu_cores INTEGER;
+            ALTER TABLE machines ADD COLUMN memory_total_mb INTEGER;
+            ALTER TABLE machines ADD COLUMN disk_total_gb INTEGER;
+            ALTER TABLE machines ADD COLUMN last_boot_time TIMESTAMP;
+            ALTER TABLE metrics_history ADD COLUMN uptime_seconds REAL;
+            `,
+		},
 	}
 
 	// Apply each migration if not already applied

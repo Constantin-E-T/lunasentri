@@ -20,10 +20,10 @@
 - [ ] Send test payload feature to validate webhook *(frontend)*
 
 ### 2. Multi-Server Support
-- [ ] Servers table with owner_user_id & API key *(backend)*
-- [ ] Metrics ingestion endpoint with agent token auth *(backend)*
-- [ ] UI: "Add Server" flow + API key management *(frontend)*
-- [ ] Dashboard toggle to select server scope *(frontend)*
+- [x] Servers table with owner_user_id & API key *(backend)*
+- [x] Metrics ingestion endpoint with agent token auth *(backend)*
+- [x] UI: "Add Server" flow + API key management *(frontend)*
+- [x] Dashboard toggle to select server scope *(frontend)*
 
 ### 3. Agent Packaging & Security
 - [ ] Document threat model & security requirements *(docs)*

@@ -28,12 +28,26 @@ type RegisterMachineResponse struct {
 
 // AgentMetricsRequest represents the metrics payload from an agent
 type AgentMetricsRequest struct {
-	Timestamp   *time.Time `json:"timestamp,omitempty"`
-	CPUPct      float64    `json:"cpu_pct"`
-	MemUsedPct  float64    `json:"mem_used_pct"`
-	DiskUsedPct float64    `json:"disk_used_pct"`
-	NetRxBytes  int64      `json:"net_rx_bytes,omitempty"`
-	NetTxBytes  int64      `json:"net_tx_bytes,omitempty"`
+	Timestamp   *time.Time              `json:"timestamp,omitempty"`
+	CPUPct      float64                 `json:"cpu_pct"`
+	MemUsedPct  float64                 `json:"mem_used_pct"`
+	DiskUsedPct float64                 `json:"disk_used_pct"`
+	NetRxBytes  int64                   `json:"net_rx_bytes,omitempty"`
+	NetTxBytes  int64                   `json:"net_tx_bytes,omitempty"`
+	UptimeS     *float64                `json:"uptime_s,omitempty"`
+	SystemInfo  *AgentSystemInfoPayload `json:"system_info,omitempty"`
+}
+
+// AgentSystemInfoPayload represents optional system metadata supplied with metrics.
+type AgentSystemInfoPayload struct {
+	Hostname        *string    `json:"hostname,omitempty"`
+	Platform        *string    `json:"platform,omitempty"`
+	PlatformVersion *string    `json:"platform_version,omitempty"`
+	KernelVersion   *string    `json:"kernel_version,omitempty"`
+	CPUCores        *int       `json:"cpu_cores,omitempty"`
+	MemoryTotalMB   *int64     `json:"memory_total_mb,omitempty"`
+	DiskTotalGB     *int64     `json:"disk_total_gb,omitempty"`
+	LastBootTime    *time.Time `json:"last_boot_time,omitempty"`
 }
 
 // handleAgentRegister handles POST /agent/register (requires session auth)
@@ -131,8 +145,22 @@ func handleAgentMetrics(machineService *machines.Service) http.HandlerFunc {
 			return
 		}
 
+		var sysInfo *machines.AgentSystemInfo
+		if req.SystemInfo != nil {
+			sysInfo = &machines.AgentSystemInfo{
+				Hostname:        req.SystemInfo.Hostname,
+				Platform:        req.SystemInfo.Platform,
+				PlatformVersion: req.SystemInfo.PlatformVersion,
+				KernelVersion:   req.SystemInfo.KernelVersion,
+				CPUCores:        req.SystemInfo.CPUCores,
+				MemoryTotalMB:   req.SystemInfo.MemoryTotalMB,
+				DiskTotalGB:     req.SystemInfo.DiskTotalGB,
+				LastBootTime:    req.SystemInfo.LastBootTime,
+			}
+		}
+
 		// Record metrics (service handles status update and timestamp)
-		if err := machineService.RecordMetrics(r.Context(), machineID, req.CPUPct, req.MemUsedPct, req.DiskUsedPct, req.NetRxBytes, req.NetTxBytes); err != nil {
+		if err := machineService.RecordMetrics(r.Context(), machineID, req.CPUPct, req.MemUsedPct, req.DiskUsedPct, req.NetRxBytes, req.NetTxBytes, req.UptimeS, sysInfo); err != nil {
 			log.Printf("Failed to record metrics for machine %d: %v", machineID, err)
 			http.Error(w, "Failed to record metrics", http.StatusInternalServerError)
 			return
@@ -140,8 +168,13 @@ func handleAgentMetrics(machineService *machines.Service) http.HandlerFunc {
 
 		// Log structured info for monitoring
 		userID, _ := GetUserIDFromContext(r.Context())
-		log.Printf("Metrics recorded: machine_id=%d, user_id=%d, remote_ip=%s, cpu=%.1f%%, mem=%.1f%%, disk=%.1f%%",
-			machineID, userID, getRemoteIP(r), req.CPUPct, req.MemUsedPct, req.DiskUsedPct)
+		log.Printf("Metrics recorded: machine_id=%d, user_id=%d, remote_ip=%s, cpu=%.1f%%, mem=%.1f%%, disk=%.1f%%, uptime=%.0fs",
+			machineID, userID, getRemoteIP(r), req.CPUPct, req.MemUsedPct, req.DiskUsedPct, func() float64 {
+				if req.UptimeS != nil {
+					return *req.UptimeS
+				}
+				return 0
+			}())
 
 		// Return 202 Accepted
 		w.WriteHeader(http.StatusAccepted)

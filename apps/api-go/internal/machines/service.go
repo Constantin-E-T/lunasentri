@@ -16,6 +16,18 @@ type Service struct {
 	store storage.Store
 }
 
+// AgentSystemInfo represents optional system metadata supplied by an agent.
+type AgentSystemInfo struct {
+	Hostname        *string
+	Platform        *string
+	PlatformVersion *string
+	KernelVersion   *string
+	CPUCores        *int
+	MemoryTotalMB   *int64
+	DiskTotalGB     *int64
+	LastBootTime    *time.Time
+}
+
 // NewService creates a new machine service
 func NewService(store storage.Store) *Service {
 	return &Service{store: store}
@@ -99,17 +111,35 @@ func (s *Service) AuthenticateMachine(ctx context.Context, apiKey string) (*stor
 	return machine, nil
 }
 
-// RecordMetrics records metrics for a machine and updates its status
-func (s *Service) RecordMetrics(ctx context.Context, machineID int, cpuPct, memUsedPct, diskUsedPct float64, netRxBytes, netTxBytes int64) error {
+// RecordMetrics records metrics for a machine and updates its status.
+// Optionally accepts uptimeSeconds and system information for enrichment.
+func (s *Service) RecordMetrics(ctx context.Context, machineID int, cpuPct, memUsedPct, diskUsedPct float64, netRxBytes, netTxBytes int64, uptimeSeconds *float64, sysInfo *AgentSystemInfo) error {
 	// Insert metrics
 	now := time.Now()
-	if err := s.store.InsertMetrics(ctx, machineID, cpuPct, memUsedPct, diskUsedPct, netRxBytes, netTxBytes, now); err != nil {
+	if err := s.store.InsertMetrics(ctx, machineID, cpuPct, memUsedPct, diskUsedPct, netRxBytes, netTxBytes, uptimeSeconds, now); err != nil {
 		return fmt.Errorf("failed to insert metrics: %w", err)
 	}
 
 	// Update machine status to online
 	if err := s.store.UpdateMachineStatus(ctx, machineID, "online", now); err != nil {
 		return fmt.Errorf("failed to update machine status: %w", err)
+	}
+
+	// Optionally enrich system info
+	if sysInfo != nil {
+		update := storage.MachineSystemInfoUpdate{
+			Hostname:        sysInfo.Hostname,
+			Platform:        sysInfo.Platform,
+			PlatformVersion: sysInfo.PlatformVersion,
+			KernelVersion:   sysInfo.KernelVersion,
+			CPUCores:        sysInfo.CPUCores,
+			MemoryTotalMB:   sysInfo.MemoryTotalMB,
+			DiskTotalGB:     sysInfo.DiskTotalGB,
+			LastBootTime:    sysInfo.LastBootTime,
+		}
+		if err := s.store.UpdateMachineSystemInfo(ctx, machineID, update); err != nil {
+			return fmt.Errorf("failed to update machine system info: %w", err)
+		}
 	}
 
 	return nil

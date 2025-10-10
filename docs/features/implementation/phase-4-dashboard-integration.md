@@ -43,8 +43,6 @@ interface UseMachineSelectionReturn {
 - Polling function passes `machineId` to `fetchMetrics()`
 - useEffect dependency array includes `machineId` for auto-refetch
 
-**Note**: Backend doesn't yet process `machine_id` parameter (see TODOs)
-
 #### Updated `useSystemInfo` Hook
 
 **Location**: `apps/web-next/lib/useSystemInfo.ts`
@@ -55,8 +53,6 @@ interface UseMachineSelectionReturn {
 - Function signature updated to accept options parameter
 - `fetchData` passes `machineId` to `fetchSystemInfo()`
 - useEffect dependency array includes `machineId` for auto-refetch
-
-**Note**: Backend doesn't yet process `machine_id` parameter (see TODOs)
 
 ### 2. UI Components
 
@@ -133,12 +129,7 @@ Body: [MetricsCard] [SystemInfoCard] [ActiveAlertsCard]
 - `fetchMetrics(machineId?: number)` - Adds `?machine_id=` query param when provided
 - `fetchSystemInfo(machineId?: number)` - Adds `?machine_id=` query param when provided
 
-**JSDoc TODOs Added:**
-Both functions include comprehensive JSDoc comments noting:
-
-- Backend has LOCAL_HOST_METRICS flag controlling metrics availability
-- Backend doesn't yet process machine_id query parameter
-- Phase 2 implementation needed in Go handlers
+**Note:** Backend now requires `machine_id` for production requests; localhost fallback remains available only when `LOCAL_HOST_METRICS=true`.
 
 ## Testing
 
@@ -196,8 +187,11 @@ Both functions include comprehensive JSDoc comments noting:
 
 ## Backend Integration Status
 
-### ⚠️ Backend TODOs (Not Yet Implemented)
+## Backend Integration
 
+- Go handlers (`/metrics`, `/ws`, `/system/info`) enforce `machine_id`, check ownership, and fall back to dev metrics only when `LOCAL_HOST_METRICS=true`.
+- Agents may post `system_info` + `uptime_s`; values persist on `machines` and `metrics_history` for dashboard display.
+- SQLite migration `012_machine_system_info` must run before deploying this release.
 The following backend changes are required for full functionality:
 
 1. **`/metrics` Endpoint** (`apps/api-go/internal/http/metrics_handler.go`)

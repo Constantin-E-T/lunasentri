@@ -14,6 +14,7 @@ import (
 	"github.com/Constantin-E-T/lunasentri/apps/api-go/internal/alerts"
 	"github.com/Constantin-E-T/lunasentri/apps/api-go/internal/auth"
 	router "github.com/Constantin-E-T/lunasentri/apps/api-go/internal/http"
+	"github.com/Constantin-E-T/lunasentri/apps/api-go/internal/machines"
 	"github.com/Constantin-E-T/lunasentri/apps/api-go/internal/metrics"
 	"github.com/Constantin-E-T/lunasentri/apps/api-go/internal/notifications"
 	"github.com/Constantin-E-T/lunasentri/apps/api-go/internal/storage"
@@ -40,6 +41,16 @@ func (f *fakeSystemService) GetSystemInfo(ctx context.Context) (system.SystemInf
 	return f.systemInfoToReturn, f.errToReturn
 }
 
+type testServer struct {
+	*httptest.Server
+	store       storage.Store
+	authService *auth.Service
+}
+
+func (ts *testServer) Close() {
+	ts.Server.Close()
+}
+
 // createTestStore creates a store for testing.
 func createTestStore(t *testing.T) storage.Store {
 	t.Helper()
@@ -58,56 +69,18 @@ func createTestStore(t *testing.T) storage.Store {
 	return store
 }
 
-// createTestAuthService creates an auth service for testing.
-func createTestAuthService(t *testing.T) *auth.Service {
+// newTestServer constructs an httptest.Server backed by the router.
+func newTestServer(t *testing.T, systemService system.Service, collector metrics.Collector) *testServer {
 	t.Helper()
 
-	store, err := storage.NewSQLiteStore("file::memory:?cache=shared")
-	if err != nil {
-		t.Fatalf("Failed to create test store: %v", err)
-	}
-
-	t.Cleanup(func() {
-		if err := store.Close(); err != nil {
-			t.Errorf("Failed to close auth test store: %v", err)
-		}
-	})
-
+	store := createTestStore(t)
 	authService, err := auth.NewService(store, "test-secret-key-for-testing", 15*time.Minute)
 	if err != nil {
 		t.Fatalf("Failed to create test auth service: %v", err)
 	}
-
-	return authService
-}
-
-// createTestAlertService creates an alert service for testing.
-func createTestAlertService(t *testing.T) *alerts.Service {
-	t.Helper()
-
-	store, err := storage.NewSQLiteStore("file::memory:?cache=shared")
-	if err != nil {
-		t.Fatalf("Failed to create test store: %v", err)
-	}
-
-	t.Cleanup(func() {
-		if err := store.Close(); err != nil {
-			t.Errorf("Failed to close alert test store: %v", err)
-		}
-	})
-
 	notifier := notifications.NewNotifier(store, log.Default())
-	return alerts.NewService(store, notifier)
-}
-
-// newTestServer constructs an httptest.Server backed by the router.
-func newTestServer(t *testing.T, systemService system.Service, collector metrics.Collector) *httptest.Server {
-	t.Helper()
-
-	store := createTestStore(t)
-	authService := createTestAuthService(t)
-	alertService := createTestAlertService(t)
-	notifier := notifications.NewNotifier(store, log.Default())
+	alertService := alerts.NewService(store, notifier)
+	machineService := machines.NewService(store)
 
 	routerCfg := &router.RouterConfig{
 		Collector:        collector,
@@ -115,6 +88,7 @@ func newTestServer(t *testing.T, systemService system.Service, collector metrics
 		AuthService:      authService,
 		AlertService:     alertService,
 		SystemService:    systemService,
+		MachineService:   machineService,
 		Store:            store,
 		WebhookNotifier:  notifier,
 		TelegramNotifier: nil,
@@ -126,8 +100,13 @@ func newTestServer(t *testing.T, systemService system.Service, collector metrics
 
 	handler := router.CORSMiddleware(router.NewRouter(routerCfg))
 	server := httptest.NewServer(handler)
-	t.Cleanup(server.Close)
-	return server
+	ts := &testServer{
+		Server:      server,
+		store:       store,
+		authService: authService,
+	}
+	t.Cleanup(ts.Close)
+	return ts
 }
 
 func TestSystemInfoHandler(t *testing.T) {
@@ -154,7 +133,22 @@ func TestSystemInfoHandler(t *testing.T) {
 
 	server := newTestServer(t, systemService, collector)
 
-	resp, err := http.Get(server.URL + "/system/info")
+	user, err := server.store.CreateUser(context.Background(), "test@example.com", "hash")
+	if err != nil {
+		t.Fatalf("Failed to seed user: %v", err)
+	}
+	token, err := server.authService.CreateSession(user.ID)
+	if err != nil {
+		t.Fatalf("Failed to create session: %v", err)
+	}
+
+	req, err := http.NewRequest("GET", server.URL+"/system/info", nil)
+	if err != nil {
+		t.Fatalf("Failed to create request: %v", err)
+	}
+	req.AddCookie(&http.Cookie{Name: auth.CookieName, Value: token, Path: "/"})
+
+	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		t.Fatalf("Failed to make request: %v", err)
 	}
@@ -199,7 +193,22 @@ func TestSystemInfoHandlerError(t *testing.T) {
 
 	server := newTestServer(t, systemService, collector)
 
-	resp, err := http.Get(server.URL + "/system/info")
+	user, err := server.store.CreateUser(context.Background(), "err@example.com", "hash")
+	if err != nil {
+		t.Fatalf("Failed to seed user: %v", err)
+	}
+	token, err := server.authService.CreateSession(user.ID)
+	if err != nil {
+		t.Fatalf("Failed to create session: %v", err)
+	}
+
+	req, err := http.NewRequest("GET", server.URL+"/system/info", nil)
+	if err != nil {
+		t.Fatalf("Failed to create request: %v", err)
+	}
+	req.AddCookie(&http.Cookie{Name: auth.CookieName, Value: token, Path: "/"})
+
+	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		t.Fatalf("Failed to make request: %v", err)
 	}
@@ -222,7 +231,23 @@ func TestSystemInfoHandlerMethodNotAllowed(t *testing.T) {
 
 	server := newTestServer(t, systemService, collector)
 
-	resp, err := http.Post(server.URL+"/system/info", "application/json", strings.NewReader("{}"))
+	user, err := server.store.CreateUser(context.Background(), "method@example.com", "hash")
+	if err != nil {
+		t.Fatalf("Failed to seed user: %v", err)
+	}
+	token, err := server.authService.CreateSession(user.ID)
+	if err != nil {
+		t.Fatalf("Failed to create session: %v", err)
+	}
+
+	req, err := http.NewRequest("POST", server.URL+"/system/info", strings.NewReader("{}"))
+	if err != nil {
+		t.Fatalf("Failed to create request: %v", err)
+	}
+	req.Header.Set("Content-Type", "application/json")
+	req.AddCookie(&http.Cookie{Name: auth.CookieName, Value: token, Path: "/"})
+
+	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		t.Fatalf("Failed to make request: %v", err)
 	}

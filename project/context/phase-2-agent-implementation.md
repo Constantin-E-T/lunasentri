@@ -10,6 +10,12 @@ Successfully implemented Phase 2 backend agent milestones for multi-machine moni
 
 **Update**: Phase 3 (Frontend) is now also complete. See `phase-3-frontend-implementation.md` for details on the `/machines` UI, registration flow, and machine management features.
 
+### 2025-10-10 Follow-up — Machine-Scoped Metrics APIs
+- `/metrics`, `/ws`, and `/system/info` now accept `machine_id` and enforce per-user ownership; fall back to 422 when LOCAL_HOST_METRICS is disabled.
+- Agents can submit `uptime_s` and `system_info` payloads; values persist on `machines` for UI rendering (platform/kernel/memory/etc.).
+- Metrics history stores `uptime_seconds`, enabling the dashboard uptime card to use agent-supplied runtime instead of server uptime.
+- WebSocket streaming polls the latest stored metrics per machine so dashboards stay live once agents report in.
+
 ## Changes Summary
 
 ### New Files Created

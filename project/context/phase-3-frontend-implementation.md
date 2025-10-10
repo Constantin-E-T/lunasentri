@@ -8,6 +8,8 @@
 
 Successfully implemented Phase 3 frontend for multi-machine monitoring, including machine management UI, registration flow with API key display, machine list page, and dashboard navigation integration.
 
+**Backend dependency resolved (2025-10-10):** Machine-scoped metrics/system info APIs landed, so the dashboard selector now surfaces real agent data once metrics arrive.
+
 ## Changes Summary
 
 ### Backend Changes

@@ -198,12 +198,15 @@ func (m *mockStore) ListMachines(ctx context.Context, userID int) ([]storage.Mac
 func (m *mockStore) UpdateMachineStatus(ctx context.Context, id int, status string, lastSeen time.Time) error {
 	return fmt.Errorf("not implemented")
 }
+func (m *mockStore) UpdateMachineSystemInfo(ctx context.Context, id int, info storage.MachineSystemInfoUpdate) error {
+	return fmt.Errorf("not implemented")
+}
 func (m *mockStore) DeleteMachine(ctx context.Context, id int, userID int) error {
 	return fmt.Errorf("not implemented")
 }
 
 // Metrics history methods (not implemented for these tests)
-func (m *mockStore) InsertMetrics(ctx context.Context, machineID int, cpuPct, memUsedPct, diskUsedPct float64, netRxBytes, netTxBytes int64, timestamp time.Time) error {
+func (m *mockStore) InsertMetrics(ctx context.Context, machineID int, cpuPct, memUsedPct, diskUsedPct float64, netRxBytes, netTxBytes int64, uptimeSeconds *float64, timestamp time.Time) error {
 	return fmt.Errorf("not implemented")
 }
 func (m *mockStore) GetLatestMetrics(ctx context.Context, machineID int) (*storage.MetricsHistory, error) {

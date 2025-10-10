@@ -220,7 +220,7 @@ func TestMetricsOperations(t *testing.T) {
 
 	t.Run("InsertMetrics", func(t *testing.T) {
 		now := time.Now()
-		err := store.InsertMetrics(ctx, machine.ID, 45.5, 67.8, 23.1, 12345, 67890, now)
+		err := store.InsertMetrics(ctx, machine.ID, 45.5, 67.8, 23.1, 12345, 67890, nil, now)
 		if err != nil {
 			t.Fatalf("Failed to insert metrics: %v", err)
 		}
@@ -229,8 +229,8 @@ func TestMetricsOperations(t *testing.T) {
 	t.Run("GetLatestMetrics", func(t *testing.T) {
 		// Insert multiple metrics
 		now := time.Now()
-		store.InsertMetrics(ctx, machine.ID, 10.0, 20.0, 30.0, 100, 200, now.Add(-2*time.Minute))
-		store.InsertMetrics(ctx, machine.ID, 50.0, 60.0, 70.0, 500, 600, now)
+		store.InsertMetrics(ctx, machine.ID, 10.0, 20.0, 30.0, 100, 200, nil, now.Add(-2*time.Minute))
+		store.InsertMetrics(ctx, machine.ID, 50.0, 60.0, 70.0, 500, 600, nil, now)
 
 		metrics, err := store.GetLatestMetrics(ctx, machine.ID)
 		if err != nil {
@@ -257,7 +257,7 @@ func TestMetricsOperations(t *testing.T) {
 		// Insert 5 metrics over time
 		for i := 0; i < 5; i++ {
 			timestamp := now.Add(time.Duration(-i) * time.Minute)
-			err := store.InsertMetrics(ctx, machine2.ID, float64(i*10), float64(i*15), float64(i*20), int64(i*100), int64(i*200), timestamp)
+			err := store.InsertMetrics(ctx, machine2.ID, float64(i*10), float64(i*15), float64(i*20), int64(i*100), int64(i*200), nil, timestamp)
 			if err != nil {
 				t.Fatalf("Failed to insert metric %d: %v", i, err)
 			}
@@ -292,7 +292,7 @@ func TestMetricsOperations(t *testing.T) {
 
 		// Insert metrics
 		now := time.Now()
-		store.InsertMetrics(ctx, machine3.ID, 11.1, 22.2, 33.3, 111, 222, now)
+		store.InsertMetrics(ctx, machine3.ID, 11.1, 22.2, 33.3, 111, 222, nil, now)
 
 		// Delete machine
 		err = store.DeleteMachine(ctx, machine3.ID, user.ID)

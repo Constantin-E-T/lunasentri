@@ -314,12 +314,16 @@ func (m *mockStore) UpdateMachineStatus(ctx context.Context, id int, status stri
 	return nil
 }
 
+func (m *mockStore) UpdateMachineSystemInfo(ctx context.Context, id int, info storage.MachineSystemInfoUpdate) error {
+	return nil
+}
+
 func (m *mockStore) DeleteMachine(ctx context.Context, id int, userID int) error {
 	return nil
 }
 
 // Metrics history methods (stub implementations for testing)
-func (m *mockStore) InsertMetrics(ctx context.Context, machineID int, cpuPct, memUsedPct, diskUsedPct float64, netRxBytes, netTxBytes int64, timestamp time.Time) error {
+func (m *mockStore) InsertMetrics(ctx context.Context, machineID int, cpuPct, memUsedPct, diskUsedPct float64, netRxBytes, netTxBytes int64, uptimeSeconds *float64, timestamp time.Time) error {
 	return nil
 }
 

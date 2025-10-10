@@ -7,6 +7,7 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"strconv"
 	"strings"
 	"time"
 
@@ -67,8 +68,8 @@ func NewRouter(cfg *RouterConfig) *http.ServeMux {
 		fmt.Fprintf(w, `{"status":"healthy"}`)
 	})
 
-	// System info endpoint (public for monitoring)
-	mux.HandleFunc("/system/info", handleSystemInfo(cfg.SystemService))
+	// System info endpoint (requires auth, machine-aware)
+	mux.Handle("/system/info", cfg.AuthService.RequireAuth(handleSystemInfo(cfg.SystemService, cfg.MachineService, cfg.LocalHostMetrics)))
 
 	// Register auth handlers (public endpoints)
 	mux.HandleFunc("/auth/register", handleRegister(cfg.AuthService))
@@ -96,10 +97,10 @@ func NewRouter(cfg *RouterConfig) *http.ServeMux {
 	mux.Handle("/auth/users/", cfg.AuthService.RequireAuth(handleDeleteUser(cfg.AuthService)))
 
 	// Register protected handlers (require authentication)
-	mux.Handle("/metrics", cfg.AuthService.RequireAuth(handleMetrics(cfg.Collector, cfg.ServerStartTime, cfg.AlertService, cfg.LocalHostMetrics)))
+	mux.Handle("/metrics", cfg.AuthService.RequireAuth(handleMetrics(cfg.Collector, cfg.ServerStartTime, cfg.AlertService, cfg.MachineService, cfg.LocalHostMetrics)))
 
 	// WebSocket endpoint for streaming metrics (protected)
-	mux.Handle("/ws", cfg.AuthService.RequireAuth(handleWebSocket(cfg.Collector, cfg.ServerStartTime, cfg.AlertService, cfg.LocalHostMetrics)))
+	mux.Handle("/ws", cfg.AuthService.RequireAuth(handleWebSocket(cfg.Collector, cfg.ServerStartTime, cfg.AlertService, cfg.MachineService, cfg.LocalHostMetrics)))
 
 	// Alert management endpoints (protected)
 	mux.Handle("/alerts/rules", cfg.AuthService.RequireAuth(handleAlertRules(cfg.AlertService)))
@@ -198,6 +199,15 @@ func CORSMiddleware(next http.Handler) http.Handler {
 	})
 }
 
+func firstNonEmpty(values ...string) string {
+	for _, v := range values {
+		if strings.TrimSpace(v) != "" {
+			return v
+		}
+	}
+	return ""
+}
+
 // evaluateAlerts is a helper function to evaluate alerts with a dedicated background context
 // This prevents context cancellation issues when request/websocket contexts are cancelled
 func evaluateAlerts(alertService *alerts.Service, metricsData metrics.Metrics) {
@@ -215,36 +225,81 @@ func evaluateAlerts(alertService *alerts.Service, metricsData metrics.Metrics) {
 }
 
 // handleMetrics handles GET /metrics
-func handleMetrics(collector metrics.Collector, startTime time.Time, alertService *alerts.Service, localHostMetrics bool) http.HandlerFunc {
+func handleMetrics(collector metrics.Collector, startTime time.Time, alertService *alerts.Service, machineService *machines.Service, localHostMetrics bool) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 
-		// TODO: Phase 2 - Require machine_id query parameter for multi-machine support
-		// For now, we check if local host metrics are enabled
+		// Determine if machine_id was provided
+		machineIDParam := r.URL.Query().Get("machine_id")
+
+		if machineIDParam != "" {
+			if machineService == nil {
+				http.Error(w, "Machine metrics service unavailable", http.StatusInternalServerError)
+				return
+			}
+
+			machineID, err := strconv.Atoi(machineIDParam)
+			if err != nil {
+				http.Error(w, "Invalid machine_id", http.StatusBadRequest)
+				return
+			}
+
+			user, ok := auth.GetUserFromContext(r.Context())
+			if !ok {
+				http.Error(w, "Unauthorized", http.StatusUnauthorized)
+				return
+			}
+
+			latest, err := machineService.GetLatestMetrics(r.Context(), machineID, user.ID)
+			if err != nil {
+				if strings.Contains(err.Error(), "no metrics found") {
+					empty := metrics.Metrics{}
+					if err := json.NewEncoder(w).Encode(empty); err != nil {
+						http.Error(w, "Internal Server Error", http.StatusInternalServerError)
+					}
+					return
+				}
+				log.Printf("Failed to fetch metrics for machine %d (user %d): %v", machineID, user.ID, err)
+				http.Error(w, "Metrics not available for this machine", http.StatusInternalServerError)
+				return
+			}
+
+			metricsData := metrics.Metrics{
+				CPUPct:      latest.CPUPct,
+				MemUsedPct:  latest.MemUsedPct,
+				DiskUsedPct: latest.DiskUsedPct,
+				UptimeS:     latest.UptimeSeconds,
+			}
+
+			evaluateAlerts(alertService, metricsData)
+
+			if err := json.NewEncoder(w).Encode(metricsData); err != nil {
+				http.Error(w, "Internal Server Error", http.StatusInternalServerError)
+				return
+			}
+			return
+		}
+
+		// No machine_id; fall back to local host metrics for development if enabled
 		if !localHostMetrics {
 			w.WriteHeader(http.StatusUnprocessableEntity)
 			json.NewEncoder(w).Encode(map[string]string{
-				"error": "Local host metrics disabled. Please register a machine and use machine_id parameter.",
-				// TODO: Reference upcoming agent ingestion work (see docs/roadmap/MULTI_MACHINE_MONITORING.md)
+				"error": "Local host metrics disabled. Please select a machine.",
 			})
 			return
 		}
 
-		// Collect real system metrics
 		ctx, cancel := context.WithTimeout(r.Context(), 3*time.Second)
 		defer cancel()
 
 		metricsData, err := collector.Snapshot(ctx)
 		if err != nil {
 			log.Printf("Failed to collect metrics: %v", err)
-			// Return zeroed metrics on error
 			metricsData = metrics.Metrics{}
 		}
 
-		// Set real uptime
 		metricsData.UptimeS = time.Since(startTime).Seconds()
 
-		// Evaluate alerts with the new metrics using background context
 		evaluateAlerts(alertService, metricsData)
 
 		if err := json.NewEncoder(w).Encode(metricsData); err != nil {
@@ -255,11 +310,40 @@ func handleMetrics(collector metrics.Collector, startTime time.Time, alertServic
 }
 
 // handleWebSocket handles WebSocket connections for streaming metrics
-func handleWebSocket(collector metrics.Collector, startTime time.Time, alertService *alerts.Service, localHostMetrics bool) http.HandlerFunc {
+func handleWebSocket(collector metrics.Collector, startTime time.Time, alertService *alerts.Service, machineService *machines.Service, localHostMetrics bool) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		// TODO: Phase 2 - Require machine_id query parameter for multi-machine support
-		if !localHostMetrics {
-			http.Error(w, "Local host metrics disabled. Please register a machine first.", http.StatusUnprocessableEntity)
+		machineIDParam := r.URL.Query().Get("machine_id")
+		var machineID int
+		var err error
+		var userID int
+		streamMachineMetrics := machineIDParam != ""
+
+		if streamMachineMetrics {
+			if machineService == nil {
+				http.Error(w, "Machine metrics service unavailable", http.StatusInternalServerError)
+				return
+			}
+
+			machineID, err = strconv.Atoi(machineIDParam)
+			if err != nil {
+				http.Error(w, "Invalid machine_id", http.StatusBadRequest)
+				return
+			}
+
+			user, ok := auth.GetUserFromContext(r.Context())
+			if !ok {
+				http.Error(w, "Unauthorized", http.StatusUnauthorized)
+				return
+			}
+			userID = user.ID
+
+			// Ensure user owns machine
+			if _, err := machineService.GetMachine(r.Context(), machineID, user.ID); err != nil {
+				http.Error(w, "Access denied", http.StatusForbidden)
+				return
+			}
+		} else if !localHostMetrics {
+			http.Error(w, "Local host metrics disabled. Please select a machine.", http.StatusUnprocessableEntity)
 			return
 		}
 
@@ -314,18 +398,33 @@ func handleWebSocket(collector metrics.Collector, startTime time.Time, alertServ
 			case <-done:
 				return
 			case <-ticker.C:
-				// Collect metrics
-				ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
-				metricsData, err := collector.Snapshot(ctx)
-				cancel()
+				var metricsData metrics.Metrics
 
-				if err != nil {
-					log.Printf("Failed to collect metrics for WebSocket: %v", err)
-					metricsData = metrics.Metrics{}
+				if streamMachineMetrics {
+					latest, err := machineService.GetLatestMetrics(r.Context(), machineID, userID)
+					if err != nil {
+						log.Printf("Failed to fetch metrics for WebSocket stream machine_id=%d: %v", machineID, err)
+						continue
+					}
+					metricsData = metrics.Metrics{
+						CPUPct:      latest.CPUPct,
+						MemUsedPct:  latest.MemUsedPct,
+						DiskUsedPct: latest.DiskUsedPct,
+						UptimeS:     latest.UptimeSeconds,
+					}
+				} else {
+					ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+					tmp, err := collector.Snapshot(ctx)
+					cancel()
+
+					if err != nil {
+						log.Printf("Failed to collect metrics for WebSocket: %v", err)
+						tmp = metrics.Metrics{}
+					}
+
+					tmp.UptimeS = time.Since(startTime).Seconds()
+					metricsData = tmp
 				}
-
-				// Set real uptime
-				metricsData.UptimeS = time.Since(startTime).Seconds()
 
 				// Evaluate alerts with the new metrics using background context
 				evaluateAlerts(alertService, metricsData)
@@ -350,7 +449,7 @@ func handleWebSocket(collector metrics.Collector, startTime time.Time, alertServ
 }
 
 // handleSystemInfo handles GET /system/info
-func handleSystemInfo(systemService system.Service) http.HandlerFunc {
+func handleSystemInfo(systemService system.Service, machineService *machines.Service, localHostMetrics bool) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodGet {
 			http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
@@ -358,6 +457,73 @@ func handleSystemInfo(systemService system.Service) http.HandlerFunc {
 		}
 
 		w.Header().Set("Content-Type", "application/json")
+
+		machineIDParam := r.URL.Query().Get("machine_id")
+
+		if machineIDParam != "" {
+			if machineService == nil {
+				http.Error(w, "Machine service unavailable", http.StatusInternalServerError)
+				return
+			}
+
+			machineID, err := strconv.Atoi(machineIDParam)
+			if err != nil {
+				http.Error(w, "Invalid machine_id", http.StatusBadRequest)
+				return
+			}
+
+			user, ok := auth.GetUserFromContext(r.Context())
+			if !ok {
+				http.Error(w, "Unauthorized", http.StatusUnauthorized)
+				return
+			}
+
+			machine, err := machineService.GetMachineWithComputedStatus(r.Context(), machineID, user.ID)
+			if err != nil {
+				log.Printf("Failed to load machine %d for user %d: %v", machineID, user.ID, err)
+				http.Error(w, "Machine not found", http.StatusNotFound)
+				return
+			}
+
+			var latestMetrics *storage.MetricsHistory
+			if m, err := machineService.GetLatestMetrics(r.Context(), machineID, user.ID); err == nil {
+				latestMetrics = m
+			}
+
+			info := system.SystemInfo{
+				Hostname:        firstNonEmpty(machine.Hostname, machine.Name),
+				Platform:        machine.Platform,
+				PlatformVersion: machine.PlatformVersion,
+				KernelVersion:   machine.KernelVersion,
+				CPUCores:        machine.CPUCores,
+			}
+
+			if machine.MemoryTotalMB > 0 {
+				info.MemoryTotalMB = uint64(machine.MemoryTotalMB)
+			}
+			if machine.DiskTotalGB > 0 {
+				info.DiskTotalGB = uint64(machine.DiskTotalGB)
+			}
+			if !machine.LastBootTime.IsZero() {
+				info.LastBootTime = uint64(machine.LastBootTime.Unix())
+			}
+			if latestMetrics != nil && latestMetrics.UptimeSeconds > 0 {
+				info.UptimeS = uint64(latestMetrics.UptimeSeconds)
+			}
+
+			if err := json.NewEncoder(w).Encode(info); err != nil {
+				http.Error(w, "Internal Server Error", http.StatusInternalServerError)
+			}
+			return
+		}
+
+		if !localHostMetrics {
+			w.WriteHeader(http.StatusUnprocessableEntity)
+			json.NewEncoder(w).Encode(map[string]string{
+				"error": "Local host system info disabled. Please select a machine.",
+			})
+			return
+		}
 
 		// Create context with timeout
 		ctx, cancel := context.WithTimeout(r.Context(), 5*time.Second)

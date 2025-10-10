@@ -58,6 +58,11 @@ go run ./cmd/api
 
 **Security Note**: Setting `LOCAL_HOST_METRICS=true` in production environments can leak host details about the API server itself. This flag should only be enabled for local development and testing purposes.
 
+### Machine-Scoped Metrics
+
+- `/metrics`, `/ws`, and `/system/info` now expect a `machine_id` query parameter in production. Without it the API returns `422` unless `LOCAL_HOST_METRICS=true`.
+- Agent ingestion supports `uptime_s` and `system_info` payloads; the dashboard renders these values directly, so agents must send accurate data.
+
 ### Authentication Architecture
 
 The current authentication mechanism uses **API key authentication** for machine-to-server communication:

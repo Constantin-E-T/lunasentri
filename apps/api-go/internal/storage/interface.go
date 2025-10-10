@@ -110,10 +110,11 @@ type Store interface {
 	GetMachineByAPIKey(ctx context.Context, apiKeyHash string) (*Machine, error)
 	ListMachines(ctx context.Context, userID int) ([]Machine, error)
 	UpdateMachineStatus(ctx context.Context, id int, status string, lastSeen time.Time) error
+	UpdateMachineSystemInfo(ctx context.Context, id int, info MachineSystemInfoUpdate) error
 	DeleteMachine(ctx context.Context, id int, userID int) error
 
 	// Metrics history methods
-	InsertMetrics(ctx context.Context, machineID int, cpuPct, memUsedPct, diskUsedPct float64, netRxBytes, netTxBytes int64, timestamp time.Time) error
+	InsertMetrics(ctx context.Context, machineID int, cpuPct, memUsedPct, diskUsedPct float64, netRxBytes, netTxBytes int64, uptimeSeconds *float64, timestamp time.Time) error
 	GetLatestMetrics(ctx context.Context, machineID int) (*MetricsHistory, error)
 	GetMetricsHistory(ctx context.Context, machineID int, from, to time.Time, limit int) ([]MetricsHistory, error)
 

@@ -136,7 +136,7 @@ func TestMachineService(t *testing.T) {
 		}
 
 		// Record metrics
-		err = service.RecordMetrics(ctx, machine.ID, 45.5, 67.8, 23.1, 12345, 67890)
+		err = service.RecordMetrics(ctx, machine.ID, 45.5, 67.8, 23.1, 12345, 67890, nil, nil)
 		if err != nil {
 			t.Fatalf("Failed to record metrics: %v", err)
 		}
@@ -156,6 +156,76 @@ func TestMachineService(t *testing.T) {
 		}
 	})
 
+	t.Run("RecordMetricsWithSystemInfo", func(t *testing.T) {
+		machine, _, err := service.RegisterMachine(ctx, user.ID, "system-info-test", "sys.example.com")
+		if err != nil {
+			t.Fatalf("Failed to register machine: %v", err)
+		}
+
+		hostname := "agent-host"
+		platform := "linux"
+		platformVersion := "debian 12"
+		kernel := "6.1.0"
+		cpuCores := 4
+		mem := int64(16384)
+		disk := int64(256)
+		lastBoot := time.Now().Add(-12 * time.Hour).UTC()
+		uptime := 43200.0
+
+		info := &AgentSystemInfo{
+			Hostname:        &hostname,
+			Platform:        &platform,
+			PlatformVersion: &platformVersion,
+			KernelVersion:   &kernel,
+			CPUCores:        &cpuCores,
+			MemoryTotalMB:   &mem,
+			DiskTotalGB:     &disk,
+			LastBootTime:    &lastBoot,
+		}
+
+		if err := service.RecordMetrics(ctx, machine.ID, 25.0, 35.0, 45.0, 1000, 2000, &uptime, info); err != nil {
+			t.Fatalf("Failed to record metrics with system info: %v", err)
+		}
+
+		updated, err := store.GetMachineByID(ctx, machine.ID)
+		if err != nil {
+			t.Fatalf("Failed to reload machine: %v", err)
+		}
+
+		if updated.Hostname != hostname {
+			t.Errorf("expected hostname %s, got %s", hostname, updated.Hostname)
+		}
+		if updated.Platform != platform {
+			t.Errorf("expected platform %s, got %s", platform, updated.Platform)
+		}
+		if updated.PlatformVersion != platformVersion {
+			t.Errorf("expected platform version %s, got %s", platformVersion, updated.PlatformVersion)
+		}
+		if updated.KernelVersion != kernel {
+			t.Errorf("expected kernel %s, got %s", kernel, updated.KernelVersion)
+		}
+		if updated.CPUCores != cpuCores {
+			t.Errorf("expected cpu cores %d, got %d", cpuCores, updated.CPUCores)
+		}
+		if updated.MemoryTotalMB != mem {
+			t.Errorf("expected memory %d, got %d", mem, updated.MemoryTotalMB)
+		}
+		if updated.DiskTotalGB != disk {
+			t.Errorf("expected disk %d, got %d", disk, updated.DiskTotalGB)
+		}
+		if updated.LastBootTime.IsZero() {
+			t.Errorf("expected last boot time to be set")
+		}
+
+		latest, err := service.GetLatestMetrics(ctx, machine.ID, user.ID)
+		if err != nil {
+			t.Fatalf("failed to fetch latest metrics: %v", err)
+		}
+		if latest.UptimeSeconds != uptime {
+			t.Errorf("expected uptime %.0f, got %.0f", uptime, latest.UptimeSeconds)
+		}
+	})
+
 	t.Run("GetLatestMetrics", func(t *testing.T) {
 		machine, _, err := service.RegisterMachine(ctx, user.ID, "latest-test", "latest.com")
 		if err != nil {
@@ -163,9 +233,9 @@ func TestMachineService(t *testing.T) {
 		}
 
 		// Record some metrics
-		service.RecordMetrics(ctx, machine.ID, 10.0, 20.0, 30.0, 100, 200)
+		service.RecordMetrics(ctx, machine.ID, 10.0, 20.0, 30.0, 100, 200, nil, nil)
 		time.Sleep(10 * time.Millisecond)
-		service.RecordMetrics(ctx, machine.ID, 50.0, 60.0, 70.0, 500, 600)
+		service.RecordMetrics(ctx, machine.ID, 50.0, 60.0, 70.0, 500, 600, nil, nil)
 
 		// Get latest
 		metrics, err := service.GetLatestMetrics(ctx, machine.ID, user.ID)
@@ -186,7 +256,7 @@ func TestMachineService(t *testing.T) {
 
 		// Record several metrics
 		for i := 0; i < 3; i++ {
-			service.RecordMetrics(ctx, machine.ID, float64(i*10), float64(i*15), float64(i*20), int64(i*100), int64(i*200))
+			service.RecordMetrics(ctx, machine.ID, float64(i*10), float64(i*15), float64(i*20), int64(i*100), int64(i*200), nil, nil)
 			time.Sleep(10 * time.Millisecond)
 		}
 
@@ -359,7 +429,7 @@ func TestGetMachineWithComputedStatus(t *testing.T) {
 	}
 
 	// Record metrics (should make it online)
-	err = service.RecordMetrics(ctx, machine.ID, 50.0, 60.0, 70.0, 1024, 2048)
+	err = service.RecordMetrics(ctx, machine.ID, 50.0, 60.0, 70.0, 1024, 2048, nil, nil)
 	if err != nil {
 		t.Fatalf("Failed to record metrics: %v", err)
 	}
@@ -406,7 +476,7 @@ func TestListMachinesWithComputedStatus(t *testing.T) {
 	}
 
 	// Record metrics only for machine1
-	err = service.RecordMetrics(ctx, machine1.ID, 50.0, 60.0, 70.0, 1024, 2048)
+	err = service.RecordMetrics(ctx, machine1.ID, 50.0, 60.0, 70.0, 1024, 2048, nil, nil)
 	if err != nil {
 		t.Fatalf("Failed to record metrics: %v", err)
 	}
