@@ -272,6 +272,9 @@ func (m *mockHTTPStore) ListMachines(ctx context.Context, userID int) ([]storage
 func (m *mockHTTPStore) UpdateMachineStatus(ctx context.Context, id int, status string, lastSeen time.Time) error {
 	return fmt.Errorf("not implemented")
 }
+func (m *mockHTTPStore) UpdateMachineLastSeen(ctx context.Context, id int, lastSeen time.Time) error {
+	return nil
+}
 func (m *mockHTTPStore) UpdateMachineSystemInfo(ctx context.Context, id int, info storage.MachineSystemInfoUpdate) error {
 	return fmt.Errorf("not implemented")
 }

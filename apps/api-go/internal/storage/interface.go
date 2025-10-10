@@ -111,6 +111,7 @@ type Store interface {
 	ListMachines(ctx context.Context, userID int) ([]Machine, error)
 	ListAllMachines(ctx context.Context) ([]Machine, error)
 	UpdateMachineStatus(ctx context.Context, id int, status string, lastSeen time.Time) error
+	UpdateMachineLastSeen(ctx context.Context, id int, lastSeen time.Time) error
 	UpdateMachineSystemInfo(ctx context.Context, id int, info MachineSystemInfoUpdate) error
 	UpdateMachineDetails(ctx context.Context, id int, updates map[string]interface{}) error
 	DeleteMachine(ctx context.Context, id int, userID int) error

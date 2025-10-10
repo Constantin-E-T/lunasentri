@@ -111,8 +111,9 @@ func (s *Service) AuthenticateMachine(ctx context.Context, apiKey string) (*stor
 	return machine, nil
 }
 
-// RecordMetrics records metrics for a machine and updates its status.
+// RecordMetrics records metrics for a machine and updates its last_seen timestamp.
 // Optionally accepts uptimeSeconds and system information for enrichment.
+// Note: Status is managed by the heartbeat monitor, not here.
 func (s *Service) RecordMetrics(ctx context.Context, machineID int, cpuPct, memUsedPct, diskUsedPct float64, netRxBytes, netTxBytes int64, uptimeSeconds *float64, sysInfo *AgentSystemInfo) error {
 	// Insert metrics
 	now := time.Now()
@@ -120,9 +121,9 @@ func (s *Service) RecordMetrics(ctx context.Context, machineID int, cpuPct, memU
 		return fmt.Errorf("failed to insert metrics: %w", err)
 	}
 
-	// Update machine status to online
-	if err := s.store.UpdateMachineStatus(ctx, machineID, "online", now); err != nil {
-		return fmt.Errorf("failed to update machine status: %w", err)
+	// Update only last_seen timestamp (status is handled by heartbeat monitor)
+	if err := s.store.UpdateMachineLastSeen(ctx, machineID, now); err != nil {
+		return fmt.Errorf("failed to update machine last_seen: %w", err)
 	}
 
 	// Optionally enrich system info

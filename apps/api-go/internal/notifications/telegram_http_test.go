@@ -265,6 +265,9 @@ func (m *mockTelegramStore) ListMachines(ctx context.Context, userID int) ([]sto
 func (m *mockTelegramStore) UpdateMachineStatus(ctx context.Context, id int, status string, lastSeen time.Time) error {
 	return fmt.Errorf("not implemented")
 }
+func (m *mockTelegramStore) UpdateMachineLastSeen(ctx context.Context, id int, lastSeen time.Time) error {
+	return nil
+}
 func (m *mockTelegramStore) UpdateMachineSystemInfo(ctx context.Context, id int, info storage.MachineSystemInfoUpdate) error {
 	return fmt.Errorf("not implemented")
 }

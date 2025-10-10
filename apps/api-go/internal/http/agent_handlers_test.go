@@ -243,13 +243,14 @@ func TestAgentMetrics(t *testing.T) {
 			t.Errorf("Expected uptime %.0f, got %.0f", uptime, metrics.UptimeSeconds)
 		}
 
-		// Verify machine status was updated to online
+		// Verify machine last_seen was updated (status is managed by heartbeat monitor)
 		updatedMachine, err := store.GetMachineByID(context.Background(), machine.ID)
 		if err != nil {
 			t.Fatalf("Failed to get machine: %v", err)
 		}
-		if updatedMachine.Status != "online" {
-			t.Errorf("Expected status 'online', got '%s'", updatedMachine.Status)
+		// Verify last_seen was updated recently
+		if time.Since(updatedMachine.LastSeen) > 5*time.Second {
+			t.Error("Last seen should be very recent")
 		}
 		if updatedMachine.Hostname != hostname {
 			t.Errorf("Expected hostname %s, got %s", hostname, updatedMachine.Hostname)

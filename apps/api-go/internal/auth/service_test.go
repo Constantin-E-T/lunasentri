@@ -314,6 +314,10 @@ func (m *mockStore) UpdateMachineStatus(ctx context.Context, id int, status stri
 	return nil
 }
 
+func (m *mockStore) UpdateMachineLastSeen(ctx context.Context, id int, lastSeen time.Time) error {
+	return nil
+}
+
 func (m *mockStore) UpdateMachineSystemInfo(ctx context.Context, id int, info storage.MachineSystemInfoUpdate) error {
 	return nil
 }

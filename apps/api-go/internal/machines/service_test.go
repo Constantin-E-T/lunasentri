@@ -141,13 +141,10 @@ func TestMachineService(t *testing.T) {
 			t.Fatalf("Failed to record metrics: %v", err)
 		}
 
-		// Verify machine status updated to online
+		// Verify machine last_seen was updated (status is managed by heartbeat monitor, not metrics endpoint)
 		updated, err := store.GetMachineByID(ctx, machine.ID)
 		if err != nil {
 			t.Fatalf("Failed to get updated machine: %v", err)
-		}
-		if updated.Status != "online" {
-			t.Errorf("Expected status 'online', got '%s'", updated.Status)
 		}
 
 		// Verify last_seen was updated recently

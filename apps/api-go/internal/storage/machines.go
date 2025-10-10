@@ -330,6 +330,31 @@ func (s *SQLiteStore) UpdateMachineStatus(ctx context.Context, id int, status st
 	return nil
 }
 
+// UpdateMachineLastSeen updates only the last_seen timestamp without changing status
+func (s *SQLiteStore) UpdateMachineLastSeen(ctx context.Context, id int, lastSeen time.Time) error {
+	query := `
+		UPDATE machines
+		SET last_seen = ?
+		WHERE id = ?
+	`
+
+	result, err := s.db.ExecContext(ctx, query, lastSeen, id)
+	if err != nil {
+		return fmt.Errorf("failed to update machine last_seen: %w", err)
+	}
+
+	rows, err := result.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("failed to get rows affected: %w", err)
+	}
+
+	if rows == 0 {
+		return fmt.Errorf("machine not found")
+	}
+
+	return nil
+}
+
 // UpdateMachineSystemInfo updates optional system metadata for a machine.
 func (s *SQLiteStore) UpdateMachineSystemInfo(ctx context.Context, id int, info MachineSystemInfoUpdate) error {
 	setClauses := []string{}
