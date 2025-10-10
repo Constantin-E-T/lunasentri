@@ -3,6 +3,7 @@
 ## The Problem
 
 **User reported:**
+
 - ✅ Offline notification works after 2 minutes
 - ❌ **No "back online" notification when agent restarts**
 - ❌ UI requires hard refresh to see status changes
@@ -42,6 +43,7 @@ if previousStatus == "offline" && newStatus == "online" {
 ```
 
 But because the metrics endpoint already changed status to "online", the heartbeat monitor saw:
+
 - `previousStatus = "online"` (already changed by metrics endpoint!)
 - `newStatus = "online"` (computed from last_seen)
 - **No transition** = No notification
@@ -61,12 +63,12 @@ UpdateMachineLastSeen(ctx context.Context, id int, lastSeen time.Time) error
 
 ```go
 func (s *SQLiteStore) UpdateMachineLastSeen(ctx context.Context, id int, lastSeen time.Time) error {
-	query := `
-		UPDATE machines
-		SET last_seen = ?  -- Only update last_seen
-		WHERE id = ?
-	`
-	// ... execute query ...
+ query := `
+  UPDATE machines
+  SET last_seen = ?  -- Only update last_seen
+  WHERE id = ?
+ `
+ // ... execute query ...
 }
 ```
 
@@ -90,6 +92,7 @@ func (s *Service) RecordMetrics(...) error {
 ### 3. Updated test mocks
 
 Added `UpdateMachineLastSeen` stub to all mock stores:
+
 - `internal/auth/service_test.go`
 - `internal/notifications/http_test.go`
 - `internal/notifications/webhooks_test.go`
@@ -98,6 +101,7 @@ Added `UpdateMachineLastSeen` stub to all mock stores:
 ### 4. Fixed failing tests
 
 Updated tests that expected metrics endpoint to set status to "online":
+
 - `internal/machines/service_test.go` - `TestMachineService/RecordMetrics`
 - `internal/http/agent_handlers_test.go` - `TestAgentMetrics/successful_metrics_ingestion`
 
@@ -136,6 +140,7 @@ T+3m30s: 🟢 Send recovery notification ✅
 ## Files Changed
 
 **Modified:**
+
 1. `internal/storage/interface.go` - Added `UpdateMachineLastSeen` method
 2. `internal/storage/machines.go` - Implemented `UpdateMachineLastSeen`
 3. `internal/machines/service.go` - Use `UpdateMachineLastSeen` instead of `UpdateMachineStatus`
@@ -147,6 +152,7 @@ T+3m30s: 🟢 Send recovery notification ✅
 9. `internal/http/agent_handlers_test.go` - Fixed test expectations
 
 **Test Results:**
+
 ```
 ✅ All packages: PASS
 ✅ Binary compilation: SUCCESS
@@ -155,6 +161,7 @@ T+3m30s: 🟢 Send recovery notification ✅
 ## Testing
 
 1. **Stop agent:**
+
    ```bash
    docker exec lunasentri-test-server pkill -f lunasentri-agent
    ```
@@ -162,6 +169,7 @@ T+3m30s: 🟢 Send recovery notification ✅
 2. **Wait 2+ minutes** → Should receive 🔴 offline notification
 
 3. **Start agent:**
+
    ```bash
    docker exec -d lunasentri-test-server /usr/local/bin/lunasentri-agent --config /etc/lunasentri/agent.yaml
    ```
@@ -171,6 +179,7 @@ T+3m30s: 🟢 Send recovery notification ✅
 ## Deployment
 
 This fix is ready to deploy. The change is backwards-compatible:
+
 - New database method (no migration needed)
 - Same API behavior for agents
 - Improved correctness of status management
@@ -182,6 +191,7 @@ This fix is ready to deploy. The change is backwards-compatible:
 The UI still requires refresh because there's no WebSocket/polling. This is a separate feature:
 
 **Options:**
+
 1. **WebSocket** - Real-time push updates (more complex)
 2. **Polling** - Frontend checks every 30s (simpler)
 3. **Keep as-is** - Manual refresh (current behavior)

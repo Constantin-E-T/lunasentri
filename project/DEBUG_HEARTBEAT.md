@@ -3,11 +3,13 @@
 ## Current Status
 
 ✅ **Working:**
+
 - Offline detection after 2 minutes
 - Offline notification sent (Telegram)
 - User logged out → still received notification
 
 ❌ **Not Working:**
+
 1. No "back online" notification when agent restarts
 2. UI requires hard refresh to see status change
 3. Real-time updates missing
@@ -16,13 +18,14 @@
 
 ## Issue 1: Missing "Back Online" Notification
 
-### What should happen:
+### What should happen
+
 1. Agent restarts → sends metrics immediately
 2. Backend heartbeat monitor detects on next check (within 30s)
 3. Status changes from "offline" → "online"
 4. Backend sends 🟢 recovery notification
 
-### Debug steps:
+### Debug steps
 
 ```bash
 # Check if agent is actually running after restart
@@ -35,15 +38,17 @@ docker logs lunasentri-test-server 2>&1 | tail -50
 # (You'll need to check your backend logs for incoming metrics)
 ```
 
-### Possible causes:
+### Possible causes
 
 **A) Agent config file doesn't exist:**
+
 ```bash
 # Check if config file exists
 docker exec lunasentri-test-server ls -la /etc/lunasentri/agent.yaml
 ```
 
 If it doesn't exist, the agent might not be starting. Try starting WITHOUT config:
+
 ```bash
 # Start agent with command-line args instead
 docker exec -d lunasentri-test-server /usr/local/bin/lunasentri-agent \
@@ -53,6 +58,7 @@ docker exec -d lunasentri-test-server /usr/local/bin/lunasentri-agent \
 ```
 
 **B) Agent starts but crashes immediately:**
+
 ```bash
 # Run agent in foreground to see errors
 docker exec -it lunasentri-test-server /usr/local/bin/lunasentri-agent --config /etc/lunasentri/agent.yaml
@@ -69,7 +75,8 @@ This could be a bug in the heartbeat logic. Let me check the code...
 
 This is **expected behavior** - here's why:
 
-### Current Implementation:
+### Current Implementation
+
 - Frontend fetches machine list from API on page load
 - No WebSocket or polling for real-time updates
 - Status updates only appear when you refresh
@@ -77,6 +84,7 @@ This is **expected behavior** - here's why:
 ### Why the delay in heartbeat detection?
 
 **Timeline:**
+
 ```
 T+0s   : Agent stops
 T+2m0s : Heartbeat monitor checks (sees last_seen > 2m) → marks offline
@@ -88,23 +96,27 @@ T+3m0s : Online notification should be sent
 ```
 
 **Why not immediate?**
+
 - Heartbeat monitor runs every **30 seconds** (not continuously)
 - It only checks on each interval tick
 - So there's always a 0-30s delay for detection
 
-### Solutions:
+### Solutions
 
 **Option A: Add real-time updates to frontend (WebSocket)**
+
 - Backend broadcasts status changes via WebSocket
 - Frontend updates UI immediately
 - More complex to implement
 
 **Option B: Add polling in frontend**
+
 - Frontend checks API every 30s for updates
 - Simpler but more API calls
 - Updates within 30s max
 
 **Option C: Keep as-is**
+
 - Users refresh when needed
 - Simplest, lowest resource usage
 - Good enough for MVP
@@ -115,20 +127,20 @@ T+3m0s : Online notification should be sent
 
 Let me check the heartbeat logic for a potential bug...
 
-### Suspected Issue:
+### Suspected Issue
 
 Looking at the heartbeat code, the recovery notification might not be sent if:
 
 1. **Machine status wasn't marked offline in DB**
    - Frontend might show "offline" but DB still says "online"
-   
+
 2. **Notification record not cleared**
    - If `ClearMachineOfflineNotification()` fails, system thinks it already notified
 
 3. **New status same as old status**
    - If the status computation has a bug
 
-### Debug commands:
+### Debug commands
 
 ```bash
 # Check database directly
@@ -143,9 +155,10 @@ SELECT machine_id, datetime(notified_at, 'localtime')
 FROM machine_offline_notifications;
 ```
 
-### Expected flow:
+### Expected flow
 
 **When agent stops:**
+
 ```sql
 -- Machine status should be "offline"
 UPDATE machines SET status = 'offline' WHERE id = X;
@@ -155,6 +168,7 @@ INSERT INTO machine_offline_notifications VALUES (X, current_timestamp);
 ```
 
 **When agent restarts:**
+
 ```sql
 -- Machine status should be "online"
 UPDATE machines SET status = 'online' WHERE id = X;

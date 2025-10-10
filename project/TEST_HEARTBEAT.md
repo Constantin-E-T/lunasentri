@@ -9,7 +9,7 @@ Status: Currently **Running** ✅
 
 ## Test 1: Trigger Offline Notification
 
-### Stop the agent to simulate machine going offline:
+### Stop the agent to simulate machine going offline
 
 ```bash
 # Stop the LunaSentri agent inside the container
@@ -19,7 +19,7 @@ docker exec lunasentri-test-server pkill -f lunasentri-agent
 docker exec lunasentri-test-server killall lunasentri-agent
 ```
 
-### What happens next:
+### What happens next
 
 1. **Immediately**: Agent stops sending metrics
 2. **After 2 minutes**: Backend heartbeat monitor detects `last_seen > 2m`
@@ -27,7 +27,7 @@ docker exec lunasentri-test-server killall lunasentri-agent
    - 🔴 Telegram message: "Machine Offline - test-server-01"
    - Webhook event (if configured): `machine.offline`
 
-### Monitor the backend logs:
+### Monitor the backend logs
 
 ```bash
 # Watch for offline detection (adjust if using different logging)
@@ -39,7 +39,7 @@ docker exec lunasentri-test-server killall lunasentri-agent
 
 ## Test 2: Trigger Recovery Notification
 
-### Restart the agent:
+### Restart the agent
 
 ```bash
 # Start the agent again
@@ -49,7 +49,7 @@ docker exec -d lunasentri-test-server /usr/local/bin/lunasentri-agent --config /
 docker exec lunasentri-test-server which lunasentri-agent
 ```
 
-### What happens next:
+### What happens next
 
 1. **Within 60s**: Agent reports first metrics batch
 2. **Next heartbeat check** (within 30s): Backend detects recovery
@@ -77,7 +77,7 @@ docker logs lunasentri-test-server 2>&1 | grep -i lunasentri
 
 ## Test 4: Verify notifications were sent
 
-### Check backend logs for heartbeat activity:
+### Check backend logs for heartbeat activity
 
 You should see logs like:
 
@@ -87,13 +87,14 @@ You should see logs like:
 [INFO] Machine 1 (test-server-01) came back online
 ```
 
-### Check Telegram:
+### Check Telegram
 
 Look for messages in your connected Telegram chat.
 
-### Check Webhooks (if configured):
+### Check Webhooks (if configured)
 
 Look at your webhook endpoint logs for POST requests with:
+
 - Event: `machine.offline`
 - Event: `machine.online`
 
@@ -187,7 +188,7 @@ lunasentri-agent \
 
 ### Get API Keys for new machines
 
-1. **Go to**: https://lunasentri.app
+1. **Go to**: <https://lunasentri.app>
 2. **Login** with your account
 3. **Navigate to**: Machines page
 4. **Click**: "Add Machine" or "Register Machine"
@@ -211,12 +212,14 @@ lunasentri-agent \
 ## Troubleshooting
 
 **Agent won't stop:**
+
 ```bash
 # Force kill
 docker exec lunasentri-test-server pkill -9 lunasentri-agent
 ```
 
 **Agent won't start:**
+
 ```bash
 # Check if binary exists
 docker exec lunasentri-test-server ls -la /usr/local/bin/lunasentri-agent
@@ -226,12 +229,14 @@ docker exec -it lunasentri-test-server /usr/local/bin/lunasentri-agent --help
 ```
 
 **No notifications received:**
+
 - Check Telegram bot is configured
 - Check webhook endpoints are active
 - Verify backend logs show heartbeat monitor running
 - Wait the full 2+ minutes for offline detection
 
 **Container not found:**
+
 ```bash
 # List all containers
 docker ps -a
