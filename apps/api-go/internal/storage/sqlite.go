@@ -245,6 +245,12 @@ func (s *SQLiteStore) migrate() error {
             ALTER TABLE metrics_history ADD COLUMN uptime_seconds REAL;
             `,
 		},
+		{
+			version: "013_machine_description",
+			sql: `
+            ALTER TABLE machines ADD COLUMN description TEXT;
+            `,
+		},
 	}
 
 	// Apply each migration if not already applied

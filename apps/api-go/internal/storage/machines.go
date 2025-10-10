@@ -14,6 +14,7 @@ type Machine struct {
 	UserID          int       `json:"user_id"`
 	Name            string    `json:"name"`
 	Hostname        string    `json:"hostname"`
+	Description     string    `json:"description"`
 	APIKey          string    `json:"api_key"` // Hashed API key
 	Status          string    `json:"status"`  // "online", "offline"
 	LastSeen        time.Time `json:"last_seen"`
@@ -53,14 +54,15 @@ type MachineSystemInfoUpdate struct {
 }
 
 // CreateMachine creates a new machine entry
-func (s *SQLiteStore) CreateMachine(ctx context.Context, userID int, name, hostname, apiKeyHash string) (*Machine, error) {
+func (s *SQLiteStore) CreateMachine(ctx context.Context, userID int, name, hostname, description, apiKeyHash string) (*Machine, error) {
 	query := `
-		INSERT INTO machines (user_id, name, hostname, api_key, status, created_at)
-		VALUES (?, ?, ?, ?, 'offline', CURRENT_TIMESTAMP)
-		RETURNING id, user_id, name, hostname, api_key, status, last_seen, platform, platform_version, kernel_version, cpu_cores, memory_total_mb, disk_total_gb, last_boot_time, created_at
+		INSERT INTO machines (user_id, name, hostname, description, api_key, status, created_at)
+		VALUES (?, ?, ?, ?, ?, 'offline', CURRENT_TIMESTAMP)
+		RETURNING id, user_id, name, hostname, description, api_key, status, last_seen, platform, platform_version, kernel_version, cpu_cores, memory_total_mb, disk_total_gb, last_boot_time, created_at
 	`
 
 	var m Machine
+	var desc sql.NullString
 	var lastSeen sql.NullTime
 	var platform sql.NullString
 	var platformVersion sql.NullString
@@ -70,14 +72,17 @@ func (s *SQLiteStore) CreateMachine(ctx context.Context, userID int, name, hostn
 	var diskTotal sql.NullInt64
 	var lastBoot sql.NullTime
 
-	err := s.db.QueryRowContext(ctx, query, userID, name, hostname, apiKeyHash).Scan(
-		&m.ID, &m.UserID, &m.Name, &m.Hostname, &m.APIKey, &m.Status, &lastSeen,
+	err := s.db.QueryRowContext(ctx, query, userID, name, hostname, description, apiKeyHash).Scan(
+		&m.ID, &m.UserID, &m.Name, &m.Hostname, &desc, &m.APIKey, &m.Status, &lastSeen,
 		&platform, &platformVersion, &kernelVersion, &cpuCores, &memoryTotal, &diskTotal, &lastBoot, &m.CreatedAt,
 	)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create machine: %w", err)
 	}
 
+	if desc.Valid {
+		m.Description = desc.String
+	}
 	if lastSeen.Valid {
 		m.LastSeen = lastSeen.Time
 	}
@@ -109,7 +114,7 @@ func (s *SQLiteStore) CreateMachine(ctx context.Context, userID int, name, hostn
 // GetMachineByID retrieves a machine by ID
 func (s *SQLiteStore) GetMachineByID(ctx context.Context, id int) (*Machine, error) {
 	query := `
-		SELECT id, user_id, name, hostname, api_key, status, last_seen,
+		SELECT id, user_id, name, hostname, description, api_key, status, last_seen,
 		       platform, platform_version, kernel_version, cpu_cores,
 		       memory_total_mb, disk_total_gb, last_boot_time, created_at
 		FROM machines
@@ -117,6 +122,7 @@ func (s *SQLiteStore) GetMachineByID(ctx context.Context, id int) (*Machine, err
 	`
 
 	var m Machine
+	var description sql.NullString
 	var lastSeen sql.NullTime
 	var platform sql.NullString
 	var platformVersion sql.NullString
@@ -127,7 +133,7 @@ func (s *SQLiteStore) GetMachineByID(ctx context.Context, id int) (*Machine, err
 	var lastBoot sql.NullTime
 
 	err := s.db.QueryRowContext(ctx, query, id).Scan(
-		&m.ID, &m.UserID, &m.Name, &m.Hostname, &m.APIKey, &m.Status, &lastSeen,
+		&m.ID, &m.UserID, &m.Name, &m.Hostname, &description, &m.APIKey, &m.Status, &lastSeen,
 		&platform, &platformVersion, &kernelVersion, &cpuCores, &memoryTotal, &diskTotal, &lastBoot, &m.CreatedAt,
 	)
 	if err == sql.ErrNoRows {
@@ -137,6 +143,9 @@ func (s *SQLiteStore) GetMachineByID(ctx context.Context, id int) (*Machine, err
 		return nil, fmt.Errorf("failed to get machine: %w", err)
 	}
 
+	if description.Valid {
+		m.Description = description.String
+	}
 	if lastSeen.Valid {
 		m.LastSeen = lastSeen.Time
 	}
@@ -168,7 +177,7 @@ func (s *SQLiteStore) GetMachineByID(ctx context.Context, id int) (*Machine, err
 // GetMachineByAPIKey retrieves a machine by API key hash
 func (s *SQLiteStore) GetMachineByAPIKey(ctx context.Context, apiKeyHash string) (*Machine, error) {
 	query := `
-		SELECT id, user_id, name, hostname, api_key, status, last_seen,
+		SELECT id, user_id, name, hostname, description, api_key, status, last_seen,
 		       platform, platform_version, kernel_version, cpu_cores,
 		       memory_total_mb, disk_total_gb, last_boot_time, created_at
 		FROM machines
@@ -176,6 +185,7 @@ func (s *SQLiteStore) GetMachineByAPIKey(ctx context.Context, apiKeyHash string)
 	`
 
 	var m Machine
+	var description sql.NullString
 	var lastSeen sql.NullTime
 	var platform sql.NullString
 	var platformVersion sql.NullString
@@ -186,7 +196,7 @@ func (s *SQLiteStore) GetMachineByAPIKey(ctx context.Context, apiKeyHash string)
 	var lastBoot sql.NullTime
 
 	err := s.db.QueryRowContext(ctx, query, apiKeyHash).Scan(
-		&m.ID, &m.UserID, &m.Name, &m.Hostname, &m.APIKey, &m.Status, &lastSeen,
+		&m.ID, &m.UserID, &m.Name, &m.Hostname, &description, &m.APIKey, &m.Status, &lastSeen,
 		&platform, &platformVersion, &kernelVersion, &cpuCores, &memoryTotal, &diskTotal, &lastBoot, &m.CreatedAt,
 	)
 	if err == sql.ErrNoRows {
@@ -196,6 +206,9 @@ func (s *SQLiteStore) GetMachineByAPIKey(ctx context.Context, apiKeyHash string)
 		return nil, fmt.Errorf("failed to get machine: %w", err)
 	}
 
+	if description.Valid {
+		m.Description = description.String
+	}
 	if lastSeen.Valid {
 		m.LastSeen = lastSeen.Time
 	}
@@ -227,7 +240,7 @@ func (s *SQLiteStore) GetMachineByAPIKey(ctx context.Context, apiKeyHash string)
 // ListMachines retrieves all machines for a user
 func (s *SQLiteStore) ListMachines(ctx context.Context, userID int) ([]Machine, error) {
 	query := `
-		SELECT id, user_id, name, hostname, api_key, status, last_seen,
+		SELECT id, user_id, name, hostname, description, api_key, status, last_seen,
 		       platform, platform_version, kernel_version, cpu_cores,
 		       memory_total_mb, disk_total_gb, last_boot_time, created_at
 		FROM machines
@@ -244,6 +257,7 @@ func (s *SQLiteStore) ListMachines(ctx context.Context, userID int) ([]Machine, 
 	var machines []Machine
 	for rows.Next() {
 		var m Machine
+		var description sql.NullString
 		var lastSeen sql.NullTime
 		var platform sql.NullString
 		var platformVersion sql.NullString
@@ -253,10 +267,13 @@ func (s *SQLiteStore) ListMachines(ctx context.Context, userID int) ([]Machine, 
 		var diskTotal sql.NullInt64
 		var lastBoot sql.NullTime
 		if err := rows.Scan(
-			&m.ID, &m.UserID, &m.Name, &m.Hostname, &m.APIKey, &m.Status, &lastSeen,
+			&m.ID, &m.UserID, &m.Name, &m.Hostname, &description, &m.APIKey, &m.Status, &lastSeen,
 			&platform, &platformVersion, &kernelVersion, &cpuCores, &memoryTotal, &diskTotal, &lastBoot, &m.CreatedAt,
 		); err != nil {
 			return nil, fmt.Errorf("failed to scan machine: %w", err)
+		}
+		if description.Valid {
+			m.Description = description.String
 		}
 		if lastSeen.Valid {
 			m.LastSeen = lastSeen.Time
@@ -370,6 +387,39 @@ func (s *SQLiteStore) UpdateMachineSystemInfo(ctx context.Context, id int, info 
 
 	if rows == 0 {
 		return fmt.Errorf("machine not found")
+	}
+
+	return nil
+}
+
+// UpdateMachineDetails updates machine fields (name, hostname, description)
+func (s *SQLiteStore) UpdateMachineDetails(ctx context.Context, id int, updates map[string]interface{}) error {
+	if len(updates) == 0 {
+		return nil
+	}
+
+	// Build dynamic SQL query
+	query := "UPDATE machines SET "
+	args := []interface{}{}
+	setClauses := []string{}
+
+	for key, value := range updates {
+		switch key {
+		case "name", "hostname", "description":
+			setClauses = append(setClauses, key+" = ?")
+			args = append(args, value)
+		default:
+			return fmt.Errorf("invalid update field: %s", key)
+		}
+	}
+
+	query += strings.Join(setClauses, ", ")
+	query += " WHERE id = ?"
+	args = append(args, id)
+
+	_, err := s.db.ExecContext(ctx, query, args...)
+	if err != nil {
+		return fmt.Errorf("failed to update machine: %w", err)
 	}
 
 	return nil

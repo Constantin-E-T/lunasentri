@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"log"
 	"net/http"
+	"strconv"
 	"strings"
 	"time"
 
@@ -13,17 +14,19 @@ import (
 
 // RegisterMachineRequest represents the machine registration request
 type RegisterMachineRequest struct {
-	Name     string `json:"name"`
-	Hostname string `json:"hostname,omitempty"`
+	Name        string `json:"name"`
+	Hostname    string `json:"hostname,omitempty"`
+	Description string `json:"description,omitempty"`
 }
 
 // RegisterMachineResponse represents the machine registration response
 type RegisterMachineResponse struct {
-	ID        int       `json:"id"`
-	Name      string    `json:"name"`
-	Hostname  string    `json:"hostname"`
-	APIKey    string    `json:"api_key"` // Only returned once at registration
-	CreatedAt time.Time `json:"created_at"`
+	ID          int       `json:"id"`
+	Name        string    `json:"name"`
+	Hostname    string    `json:"hostname"`
+	Description string    `json:"description"`
+	APIKey      string    `json:"api_key"` // Only returned once at registration
+	CreatedAt   time.Time `json:"created_at"`
 }
 
 // AgentMetricsRequest represents the metrics payload from an agent
@@ -80,7 +83,7 @@ func handleAgentRegister(machineService *machines.Service) http.HandlerFunc {
 		}
 
 		// Register machine
-		machine, apiKey, err := machineService.RegisterMachine(r.Context(), user.ID, req.Name, req.Hostname)
+		machine, apiKey, err := machineService.RegisterMachine(r.Context(), user.ID, req.Name, req.Hostname, req.Description)
 		if err != nil {
 			log.Printf("Failed to register machine for user %d: %v", user.ID, err)
 			http.Error(w, "Failed to register machine", http.StatusInternalServerError)
@@ -91,11 +94,12 @@ func handleAgentRegister(machineService *machines.Service) http.HandlerFunc {
 
 		// Return machine details with API key (only time it's visible)
 		response := RegisterMachineResponse{
-			ID:        machine.ID,
-			Name:      machine.Name,
-			Hostname:  machine.Hostname,
-			APIKey:    apiKey,
-			CreatedAt: machine.CreatedAt,
+			ID:          machine.ID,
+			Name:        machine.Name,
+			Hostname:    machine.Hostname,
+			Description: machine.Description,
+			APIKey:      apiKey,
+			CreatedAt:   machine.CreatedAt,
 		}
 
 		w.Header().Set("Content-Type", "application/json")
@@ -229,5 +233,103 @@ func handleListMachines(machineService *machines.Service) http.HandlerFunc {
 
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(machinesList)
+	}
+}
+
+// handleDeleteMachine handles DELETE /machines/:id (requires session auth)
+func handleDeleteMachine(machineService *machines.Service) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodDelete {
+			http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
+
+		// Get authenticated user from context
+		user, ok := auth.GetUserFromContext(r.Context())
+		if !ok {
+			http.Error(w, "Unauthorized", http.StatusUnauthorized)
+			return
+		}
+
+		// Extract machine ID from URL path
+		// Expecting: DELETE /machines/{id}
+		pathParts := strings.Split(strings.Trim(r.URL.Path, "/"), "/")
+		if len(pathParts) != 2 {
+			http.Error(w, "Invalid path", http.StatusBadRequest)
+			return
+		}
+
+		machineID, err := strconv.Atoi(pathParts[1])
+		if err != nil {
+			http.Error(w, "Invalid machine ID", http.StatusBadRequest)
+			return
+		}
+
+		// Delete the machine (service will verify ownership)
+		err = machineService.DeleteMachine(r.Context(), machineID, user.ID)
+		if err != nil {
+			log.Printf("Failed to delete machine %d for user %d: %v", machineID, user.ID, err)
+			http.Error(w, "Failed to delete machine", http.StatusInternalServerError)
+			return
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(map[string]string{
+			"message": "Machine deleted successfully",
+		})
+	}
+}
+
+// handleUpdateMachine handles PATCH /machines/:id (requires session auth)
+func handleUpdateMachine(machineService *machines.Service) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPatch {
+			http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
+
+		// Get authenticated user from context
+		user, ok := auth.GetUserFromContext(r.Context())
+		if !ok {
+			http.Error(w, "Unauthorized", http.StatusUnauthorized)
+			return
+		}
+
+		// Extract machine ID from URL path
+		pathParts := strings.Split(strings.Trim(r.URL.Path, "/"), "/")
+		if len(pathParts) != 2 {
+			http.Error(w, "Invalid path", http.StatusBadRequest)
+			return
+		}
+
+		machineID, err := strconv.Atoi(pathParts[1])
+		if err != nil {
+			http.Error(w, "Invalid machine ID", http.StatusBadRequest)
+			return
+		}
+
+		// Parse update request
+		var req struct {
+			Name        *string `json:"name"`
+			Hostname    *string `json:"hostname"`
+			Description *string `json:"description"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			http.Error(w, "Invalid JSON", http.StatusBadRequest)
+			return
+		}
+
+		// Update the machine (service will verify ownership)
+		err = machineService.UpdateMachine(r.Context(), machineID, user.ID, req.Name, req.Hostname, req.Description)
+		if err != nil {
+			log.Printf("Failed to update machine %d for user %d: %v", machineID, user.ID, err)
+			http.Error(w, "Failed to update machine", http.StatusInternalServerError)
+			return
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(map[string]string{
+			"message": "Machine updated successfully",
+		})
 	}
 }

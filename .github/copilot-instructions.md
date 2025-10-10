@@ -57,6 +57,11 @@ npm run build  # Includes --turbopack flag
 - **Styling**: Dark theme with slate color palette (`from-slate-900 to-slate-800`)
 - **UI Pattern**: Gradient backgrounds with backdrop-blur glass effects
 - **Typography**: Large headings (text-6xl) with emoji icons (🌙 for LunaSentri)
+- **User Interactions**:
+  - **NEVER use browser `alert()` or `confirm()` dialogs** - always use Dialog components
+  - Use `@/components/ui/dialog` for all confirmations and modals
+  - Display errors inline within forms/modals, not as alerts
+- **Data Consistency**: Every database field must have UI support for create, view, and edit operations
 
 ### Tailwind CSS v4 Specific
 

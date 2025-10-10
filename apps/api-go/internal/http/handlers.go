@@ -169,6 +169,16 @@ func NewRouter(cfg *RouterConfig) *http.ServeMux {
 
 	// Machine management endpoints (session authenticated)
 	mux.Handle("/machines", cfg.AuthService.RequireAuth(handleListMachines(cfg.MachineService)))
+	mux.Handle("/machines/", cfg.AuthService.RequireAuth(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.Method {
+		case http.MethodDelete:
+			handleDeleteMachine(cfg.MachineService)(w, r)
+		case http.MethodPatch:
+			handleUpdateMachine(cfg.MachineService)(w, r)
+		default:
+			http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		}
+	})))
 
 	return mux
 }
@@ -184,7 +194,7 @@ func CORSMiddleware(next http.Handler) http.Handler {
 
 		// Set CORS headers
 		w.Header().Set("Access-Control-Allow-Origin", allowedOrigin)
-		w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
+		w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, PATCH, DELETE, OPTIONS")
 		w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization, X-Requested-With")
 		w.Header().Set("Access-Control-Allow-Credentials", "true")
 

@@ -52,7 +52,7 @@ func HashAPIKey(apiKey string) string {
 }
 
 // RegisterMachine registers a new machine for a user
-func (s *Service) RegisterMachine(ctx context.Context, userID int, name, hostname string) (*storage.Machine, string, error) {
+func (s *Service) RegisterMachine(ctx context.Context, userID int, name, hostname, description string) (*storage.Machine, string, error) {
 	// Generate API key
 	apiKey, err := GenerateAPIKey()
 	if err != nil {
@@ -63,7 +63,7 @@ func (s *Service) RegisterMachine(ctx context.Context, userID int, name, hostnam
 	apiKeyHash := HashAPIKey(apiKey)
 
 	// Create machine in database
-	machine, err := s.store.CreateMachine(ctx, userID, name, hostname, apiKeyHash)
+	machine, err := s.store.CreateMachine(ctx, userID, name, hostname, description, apiKeyHash)
 	if err != nil {
 		return nil, "", fmt.Errorf("failed to create machine: %w", err)
 	}
@@ -224,4 +224,37 @@ func (s *Service) ListMachinesWithComputedStatus(ctx context.Context, userID int
 	}
 
 	return machines, nil
+}
+
+// UpdateMachine updates machine details, ensuring the user owns it
+func (s *Service) UpdateMachine(ctx context.Context, machineID, userID int, name, hostname, description *string) error {
+	// First verify ownership
+	machine, err := s.store.GetMachineByID(ctx, machineID)
+	if err != nil {
+		return err
+	}
+
+	if machine.UserID != userID {
+		return fmt.Errorf("access denied: machine does not belong to user")
+	}
+
+	// Build update query dynamically based on what's provided
+	updates := make(map[string]interface{})
+	if name != nil {
+		updates["name"] = *name
+	}
+	if hostname != nil {
+		updates["hostname"] = *hostname
+	}
+	if description != nil {
+		updates["description"] = *description
+	}
+
+	// If nothing to update, return early
+	if len(updates) == 0 {
+		return nil
+	}
+
+	// Perform update in storage layer
+	return s.store.UpdateMachineDetails(ctx, machineID, updates)
 }

@@ -22,6 +22,7 @@ import { CheckIcon, CopyIcon } from "lucide-react";
 interface RegisterFormData {
   name: string;
   hostname?: string;
+  description?: string;
 }
 
 export default function MachinesPage() {
@@ -33,9 +34,27 @@ export default function MachinesPage() {
   const [registering, setRegistering] = useState(false);
   const [machineName, setMachineName] = useState("");
   const [machineHostname, setMachineHostname] = useState("");
+  const [machineDescription, setMachineDescription] = useState("");
   const [apiKey, setApiKey] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
   const [registerError, setRegisterError] = useState<string | null>(null);
+
+  // Edit modal state
+  const [showEditModal, setShowEditModal] = useState(false);
+  const [editingMachine, setEditingMachine] = useState<any>(null);
+  const [editName, setEditName] = useState("");
+  const [editHostname, setEditHostname] = useState("");
+  const [editDescription, setEditDescription] = useState("");
+  const [updating, setUpdating] = useState(false);
+  const [updateError, setUpdateError] = useState<string | null>(null);
+
+  // Delete modal state
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const [deletingMachine, setDeletingMachine] = useState<{
+    id: number;
+    name: string;
+  } | null>(null);
+  const [deleting, setDeleting] = useState(false);
 
   // Redirect to login if unauthenticated
   useEffect(() => {
@@ -74,6 +93,9 @@ export default function MachinesPage() {
       if (machineHostname.trim()) {
         formData.hostname = machineHostname.trim();
       }
+      if (machineDescription.trim()) {
+        formData.description = machineDescription.trim();
+      }
 
       const response = await register(formData);
 
@@ -81,6 +103,7 @@ export default function MachinesPage() {
       setApiKey(response.api_key);
       setMachineName("");
       setMachineHostname("");
+      setMachineDescription("");
     } catch (err) {
       setRegisterError(
         err instanceof Error ? err.message : "Failed to register machine"
@@ -105,6 +128,68 @@ export default function MachinesPage() {
     setMachineHostname("");
     setRegisterError(null);
     setCopied(false);
+  };
+
+  const handleEditMachine = (machine: any) => {
+    setEditingMachine(machine);
+    setEditName(machine.name);
+    setEditHostname(machine.hostname || "");
+    setEditDescription(machine.description || "");
+    setShowEditModal(true);
+  };
+
+  const handleUpdateMachine = async () => {
+    if (!editingMachine || !editName.trim()) {
+      return;
+    }
+
+    setUpdating(true);
+    setUpdateError(null);
+    try {
+      const { updateMachine } = await import("@/lib/api");
+      await updateMachine(editingMachine.id, {
+        name: editName.trim(),
+        hostname: editHostname.trim() || undefined,
+        description: editDescription.trim() || undefined,
+      });
+
+      // Refresh machines list
+      await refresh();
+      setShowEditModal(false);
+      setEditingMachine(null);
+    } catch (err) {
+      console.error("Failed to update machine:", err);
+      setUpdateError(
+        err instanceof Error ? err.message : "Failed to update machine"
+      );
+    } finally {
+      setUpdating(false);
+    }
+  };
+
+  const handleDeleteMachine = (id: number, name: string) => {
+    setDeletingMachine({ id, name });
+    setShowDeleteModal(true);
+  };
+
+  const handleConfirmDelete = async () => {
+    if (!deletingMachine) return;
+
+    setDeleting(true);
+    try {
+      const { deleteMachine } = await import("@/lib/api");
+      await deleteMachine(deletingMachine.id);
+
+      // Refresh machines list
+      await refresh();
+      setShowDeleteModal(false);
+      setDeletingMachine(null);
+    } catch (err) {
+      console.error("Failed to delete machine:", err);
+      // Keep modal open to show error
+    } finally {
+      setDeleting(false);
+    }
   };
 
   const getStatusColor = (status: string) => {
@@ -187,7 +272,7 @@ export default function MachinesPage() {
             )}
 
             {/* Machines List */}
-            {machines.length === 0 ? (
+            {!machines || machines.length === 0 ? (
               <div className="rounded-lg border border-border/40 bg-card/40 backdrop-blur-sm p-12 text-center">
                 <div className="text-6xl mb-4">🖥️</div>
                 <h3 className="text-xl font-semibold mb-2">No machines yet</h3>
@@ -215,6 +300,12 @@ export default function MachinesPage() {
                       </Badge>
                     </div>
                     <div className="space-y-2 text-sm text-muted-foreground">
+                      {machine.description && (
+                        <div>
+                          <span className="font-medium">Description:</span>{" "}
+                          {machine.description}
+                        </div>
+                      )}
                       <div>
                         <span className="font-medium">Hostname:</span>{" "}
                         {machine.hostname || "—"}
@@ -228,7 +319,28 @@ export default function MachinesPage() {
                         {new Date(machine.created_at).toLocaleDateString()}
                       </div>
                     </div>
-                    {/* TODO: Add rename/delete when backend supports it */}
+
+                    {/* Action Buttons */}
+                    <div className="mt-4 pt-4 border-t border-border/20 flex gap-2">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="flex-1"
+                        onClick={() => handleEditMachine(machine)}
+                      >
+                        Edit
+                      </Button>
+                      <Button
+                        variant="destructive"
+                        size="sm"
+                        className="flex-1"
+                        onClick={() =>
+                          handleDeleteMachine(machine.id, machine.name)
+                        }
+                      >
+                        Delete
+                      </Button>
+                    </div>
                   </div>
                 ))}
               </div>
@@ -328,6 +440,19 @@ export default function MachinesPage() {
                   disabled={registering}
                 />
               </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="description">Description (optional)</Label>
+                <Input
+                  id="description"
+                  placeholder="e.g., Main production server"
+                  value={machineDescription}
+                  onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
+                    setMachineDescription(e.target.value)
+                  }
+                  disabled={registering}
+                />
+              </div>
             </div>
           )}
 
@@ -350,6 +475,110 @@ export default function MachinesPage() {
                 </Button>
               </>
             )}
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Edit Machine Dialog */}
+      <Dialog open={showEditModal} onOpenChange={setShowEditModal}>
+        <DialogContent className="sm:max-w-[500px]">
+          <DialogHeader>
+            <DialogTitle>Edit Machine</DialogTitle>
+            <DialogDescription>Update machine details</DialogDescription>
+          </DialogHeader>
+
+          {updateError && (
+            <div className="rounded-lg bg-destructive/20 border border-destructive/30 p-3 text-destructive text-sm">
+              {updateError}
+            </div>
+          )}
+
+          <div className="space-y-4">
+            <div className="space-y-2">
+              <Label htmlFor="edit-name">Name *</Label>
+              <Input
+                id="edit-name"
+                placeholder="e.g., Production Server"
+                value={editName}
+                onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
+                  setEditName(e.target.value)
+                }
+                disabled={updating}
+              />
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="edit-hostname">Hostname</Label>
+              <Input
+                id="edit-hostname"
+                placeholder="e.g., web-1.example.com"
+                value={editHostname}
+                onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
+                  setEditHostname(e.target.value)
+                }
+                disabled={updating}
+              />
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="edit-description">Description</Label>
+              <Input
+                id="edit-description"
+                placeholder="Optional description"
+                value={editDescription}
+                onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
+                  setEditDescription(e.target.value)
+                }
+                disabled={updating}
+              />
+            </div>
+          </div>
+
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => setShowEditModal(false)}
+              disabled={updating}
+            >
+              Cancel
+            </Button>
+            <Button
+              onClick={handleUpdateMachine}
+              disabled={updating || !editName.trim()}
+            >
+              {updating ? "Updating..." : "Save Changes"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Delete Confirmation Dialog */}
+      <Dialog open={showDeleteModal} onOpenChange={setShowDeleteModal}>
+        <DialogContent className="sm:max-w-[425px]">
+          <DialogHeader>
+            <DialogTitle>Delete Machine</DialogTitle>
+            <DialogDescription>
+              Are you sure you want to delete &quot;{deletingMachine?.name}
+              &quot;? This will remove all associated metrics and cannot be
+              undone.
+            </DialogDescription>
+          </DialogHeader>
+
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => setShowDeleteModal(false)}
+              disabled={deleting}
+            >
+              Cancel
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={handleConfirmDelete}
+              disabled={deleting}
+            >
+              {deleting ? "Deleting..." : "Delete"}
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

@@ -46,9 +46,9 @@ export default function Home() {
 
   return (
     <div className="min-h-screen">
-      <div className="border-b border-border/40 bg-card/40 backdrop-blur-xl">
+      <div className="border-b border-border/40 bg-card/40 backdrop-blur-xl relative z-40">
         <div className="max-w-6xl mx-auto px-6 py-4 flex flex-wrap gap-4 justify-between items-center">
-          <div className="flex items-center gap-6">
+          <div className="flex items-center gap-6 relative z-50">
             <div className="flex items-center gap-3 text-primary">
               <span className="text-2xl">🌙</span>
               <span className="font-semibold tracking-wide">LunaSentri</span>

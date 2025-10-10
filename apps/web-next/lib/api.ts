@@ -392,6 +392,7 @@ export interface Machine {
   user_id: number;
   name: string;
   hostname: string;
+  description: string;
   status: 'online' | 'offline';
   last_seen: string;
   created_at: string;
@@ -400,6 +401,7 @@ export interface Machine {
 export interface RegisterMachineRequest {
   name: string;
   hostname?: string;
+  description?: string;
 }
 
 export interface RegisterMachineResponse {
@@ -438,7 +440,6 @@ export async function getMachine(id: number): Promise<Machine> {
 
 /**
  * Delete a machine by ID.
- * TODO: Backend endpoint not yet implemented - placeholder for future use.
  */
 export async function deleteMachine(id: number): Promise<void> {
   return requestVoid(`${API_URL}/machines/${id}`, {
@@ -447,12 +448,14 @@ export async function deleteMachine(id: number): Promise<void> {
 }
 
 /**
- * Update machine name/hostname.
- * TODO: Backend endpoint not yet implemented - placeholder for future use.
+ * Update machine details (name, hostname, description).
  */
-export async function updateMachine(id: number, data: { name?: string; hostname?: string }): Promise<Machine> {
-  return request<Machine>(`${API_URL}/machines/${id}`, {
-    method: 'PUT',
+export async function updateMachine(
+  id: number,
+  data: { name?: string; hostname?: string; description?: string }
+): Promise<{ message: string }> {
+  return request<{ message: string }>(`${API_URL}/machines/${id}`, {
+    method: 'PATCH',
     body: JSON.stringify(data),
   });
 }

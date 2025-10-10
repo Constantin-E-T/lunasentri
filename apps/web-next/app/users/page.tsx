@@ -11,6 +11,15 @@ import {
   type User,
   type CreateUserResponse,
 } from "@/lib/api";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { Button } from "@/components/ui/button";
 
 export default function UsersPage() {
   const router = useRouter();
@@ -26,6 +35,13 @@ export default function UsersPage() {
   const [password, setPassword] = useState("");
   const [formError, setFormError] = useState<string | null>(null);
   const [tempPassword, setTempPassword] = useState<string | null>(null);
+
+  // Delete confirmation state
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const [deletingUser, setDeletingUser] = useState<{
+    id: number;
+    email: string;
+  } | null>(null);
 
   // Redirect to login if unauthenticated
   useEffect(() => {
@@ -92,17 +108,23 @@ export default function UsersPage() {
     }
   };
 
-  const handleDeleteUser = async (userId: number, userEmail: string) => {
-    if (!confirm(`Are you sure you want to delete user ${userEmail}?`)) {
-      return;
-    }
+  const handleDeleteUser = (userId: number, userEmail: string) => {
+    setDeletingUser({ id: userId, email: userEmail });
+    setShowDeleteModal(true);
+  };
+
+  const handleConfirmDelete = async () => {
+    if (!deletingUser) return;
 
     try {
-      setIsDeletingId(userId);
-      await deleteUser(userId);
+      setIsDeletingId(deletingUser.id);
+      await deleteUser(deletingUser.id);
       await fetchUsers();
+      setShowDeleteModal(false);
+      setDeletingUser(null);
     } catch (err) {
-      alert(err instanceof Error ? err.message : "Failed to delete user");
+      // Keep modal open on error so user can see what went wrong
+      console.error("Failed to delete user:", err);
     } finally {
       setIsDeletingId(null);
     }
@@ -342,6 +364,36 @@ export default function UsersPage() {
           )}
         </div>
       </div>
+
+      {/* Delete Confirmation Dialog */}
+      <Dialog open={showDeleteModal} onOpenChange={setShowDeleteModal}>
+        <DialogContent className="sm:max-w-[425px]">
+          <DialogHeader>
+            <DialogTitle>Delete User</DialogTitle>
+            <DialogDescription>
+              Are you sure you want to delete user &quot;{deletingUser?.email}
+              &quot;? This action cannot be undone.
+            </DialogDescription>
+          </DialogHeader>
+
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => setShowDeleteModal(false)}
+              disabled={isDeletingId !== null}
+            >
+              Cancel
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={handleConfirmDelete}
+              disabled={isDeletingId !== null}
+            >
+              {isDeletingId !== null ? "Deleting..." : "Delete User"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

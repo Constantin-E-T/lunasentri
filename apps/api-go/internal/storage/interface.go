@@ -105,12 +105,13 @@ type Store interface {
 	UpdateTelegramDeliveryState(ctx context.Context, id int, lastAttemptAt time.Time, cooldownUntil *time.Time) error
 
 	// Machine methods
-	CreateMachine(ctx context.Context, userID int, name, hostname, apiKeyHash string) (*Machine, error)
+	CreateMachine(ctx context.Context, userID int, name, hostname, description, apiKeyHash string) (*Machine, error)
 	GetMachineByID(ctx context.Context, id int) (*Machine, error)
 	GetMachineByAPIKey(ctx context.Context, apiKeyHash string) (*Machine, error)
 	ListMachines(ctx context.Context, userID int) ([]Machine, error)
 	UpdateMachineStatus(ctx context.Context, id int, status string, lastSeen time.Time) error
 	UpdateMachineSystemInfo(ctx context.Context, id int, info MachineSystemInfoUpdate) error
+	UpdateMachineDetails(ctx context.Context, id int, updates map[string]interface{}) error
 	DeleteMachine(ctx context.Context, id int, userID int) error
 
 	// Metrics history methods
