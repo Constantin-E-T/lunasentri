@@ -67,19 +67,25 @@ func telegramRecipientToResponse(recipient storage.TelegramRecipient) TelegramRe
 func HandleListTelegramRecipients(store storage.Store) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodGet {
-			http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusMethodNotAllowed)
+			json.NewEncoder(w).Encode(map[string]string{"error": "Method not allowed"})
 			return
 		}
 
 		user, ok := r.Context().Value(auth.UserContextKey).(*storage.User)
 		if !ok {
-			http.Error(w, "Unauthorized", http.StatusUnauthorized)
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusUnauthorized)
+			json.NewEncoder(w).Encode(map[string]string{"error": "Unauthorized"})
 			return
 		}
 
 		recipients, err := store.ListTelegramRecipients(r.Context(), user.ID)
 		if err != nil {
-			http.Error(w, fmt.Sprintf("Failed to list telegram recipients: %v", err), http.StatusInternalServerError)
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusInternalServerError)
+			json.NewEncoder(w).Encode(map[string]string{"error": fmt.Sprintf("Failed to list telegram recipients: %v", err)})
 			return
 		}
 
@@ -97,34 +103,46 @@ func HandleListTelegramRecipients(store storage.Store) http.HandlerFunc {
 func HandleCreateTelegramRecipient(store storage.Store) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodPost {
-			http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusMethodNotAllowed)
+			json.NewEncoder(w).Encode(map[string]string{"error": "Method not allowed"})
 			return
 		}
 
 		user, ok := r.Context().Value(auth.UserContextKey).(*storage.User)
 		if !ok {
-			http.Error(w, "Unauthorized", http.StatusUnauthorized)
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusUnauthorized)
+			json.NewEncoder(w).Encode(map[string]string{"error": "Unauthorized"})
 			return
 		}
 
 		var req TelegramRecipientRequest
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-			http.Error(w, fmt.Sprintf("Invalid request body: %v", err), http.StatusBadRequest)
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusBadRequest)
+			json.NewEncoder(w).Encode(map[string]string{"error": fmt.Sprintf("Invalid request body: %v", err)})
 			return
 		}
 
 		if err := validateTelegramRecipientRequest(&req); err != nil {
-			http.Error(w, err.Error(), http.StatusBadRequest)
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusBadRequest)
+			json.NewEncoder(w).Encode(map[string]string{"error": err.Error()})
 			return
 		}
 
 		recipient, err := store.CreateTelegramRecipient(r.Context(), user.ID, req.ChatID)
 		if err != nil {
 			if strings.Contains(err.Error(), "already exists") {
-				http.Error(w, err.Error(), http.StatusConflict)
+				w.Header().Set("Content-Type", "application/json")
+				w.WriteHeader(http.StatusConflict)
+				json.NewEncoder(w).Encode(map[string]string{"error": err.Error()})
 				return
 			}
-			http.Error(w, fmt.Sprintf("Failed to create telegram recipient: %v", err), http.StatusInternalServerError)
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusInternalServerError)
+			json.NewEncoder(w).Encode(map[string]string{"error": fmt.Sprintf("Failed to create telegram recipient: %v", err)})
 			return
 		}
 
@@ -138,39 +156,51 @@ func HandleCreateTelegramRecipient(store storage.Store) http.HandlerFunc {
 func HandleUpdateTelegramRecipient(store storage.Store) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodPut {
-			http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusMethodNotAllowed)
+			json.NewEncoder(w).Encode(map[string]string{"error": "Method not allowed"})
 			return
 		}
 
 		user, ok := r.Context().Value(auth.UserContextKey).(*storage.User)
 		if !ok {
-			http.Error(w, "Unauthorized", http.StatusUnauthorized)
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusUnauthorized)
+			json.NewEncoder(w).Encode(map[string]string{"error": "Unauthorized"})
 			return
 		}
 
 		// Extract ID from URL path
 		pathParts := strings.Split(strings.Trim(r.URL.Path, "/"), "/")
 		if len(pathParts) < 3 {
-			http.Error(w, "Invalid URL path", http.StatusBadRequest)
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusBadRequest)
+			json.NewEncoder(w).Encode(map[string]string{"error": "Invalid URL path"})
 			return
 		}
 
 		id, err := strconv.Atoi(pathParts[2])
 		if err != nil {
-			http.Error(w, "Invalid telegram recipient ID", http.StatusBadRequest)
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusBadRequest)
+			json.NewEncoder(w).Encode(map[string]string{"error": "Invalid telegram recipient ID"})
 			return
 		}
 
 		var req TelegramRecipientRequest
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-			http.Error(w, fmt.Sprintf("Invalid request body: %v", err), http.StatusBadRequest)
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusBadRequest)
+			json.NewEncoder(w).Encode(map[string]string{"error": fmt.Sprintf("Invalid request body: %v", err)})
 			return
 		}
 
 		// Validate chat_id if provided
 		if req.ChatID != "" {
 			if err := validateTelegramRecipientRequest(&req); err != nil {
-				http.Error(w, err.Error(), http.StatusBadRequest)
+				w.Header().Set("Content-Type", "application/json")
+				w.WriteHeader(http.StatusBadRequest)
+				json.NewEncoder(w).Encode(map[string]string{"error": err.Error()})
 				return
 			}
 		}
@@ -178,10 +208,14 @@ func HandleUpdateTelegramRecipient(store storage.Store) http.HandlerFunc {
 		recipient, err := store.UpdateTelegramRecipient(r.Context(), id, user.ID, req.ChatID, req.IsActive)
 		if err != nil {
 			if strings.Contains(err.Error(), "not found") || strings.Contains(err.Error(), "unauthorized") {
-				http.Error(w, err.Error(), http.StatusNotFound)
+				w.Header().Set("Content-Type", "application/json")
+				w.WriteHeader(http.StatusNotFound)
+				json.NewEncoder(w).Encode(map[string]string{"error": err.Error()})
 				return
 			}
-			http.Error(w, fmt.Sprintf("Failed to update telegram recipient: %v", err), http.StatusInternalServerError)
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusInternalServerError)
+			json.NewEncoder(w).Encode(map[string]string{"error": fmt.Sprintf("Failed to update telegram recipient: %v", err)})
 			return
 		}
 
@@ -194,35 +228,47 @@ func HandleUpdateTelegramRecipient(store storage.Store) http.HandlerFunc {
 func HandleDeleteTelegramRecipient(store storage.Store) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodDelete {
-			http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusMethodNotAllowed)
+			json.NewEncoder(w).Encode(map[string]string{"error": "Method not allowed"})
 			return
 		}
 
 		user, ok := r.Context().Value(auth.UserContextKey).(*storage.User)
 		if !ok {
-			http.Error(w, "Unauthorized", http.StatusUnauthorized)
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusUnauthorized)
+			json.NewEncoder(w).Encode(map[string]string{"error": "Unauthorized"})
 			return
 		}
 
 		// Extract ID from URL path
 		pathParts := strings.Split(strings.Trim(r.URL.Path, "/"), "/")
 		if len(pathParts) < 3 {
-			http.Error(w, "Invalid URL path", http.StatusBadRequest)
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusBadRequest)
+			json.NewEncoder(w).Encode(map[string]string{"error": "Invalid URL path"})
 			return
 		}
 
 		id, err := strconv.Atoi(pathParts[2])
 		if err != nil {
-			http.Error(w, "Invalid telegram recipient ID", http.StatusBadRequest)
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusBadRequest)
+			json.NewEncoder(w).Encode(map[string]string{"error": "Invalid telegram recipient ID"})
 			return
 		}
 
 		if err := store.DeleteTelegramRecipient(r.Context(), id, user.ID); err != nil {
 			if strings.Contains(err.Error(), "not found") || strings.Contains(err.Error(), "unauthorized") {
-				http.Error(w, err.Error(), http.StatusNotFound)
+				w.Header().Set("Content-Type", "application/json")
+				w.WriteHeader(http.StatusNotFound)
+				json.NewEncoder(w).Encode(map[string]string{"error": err.Error()})
 				return
 			}
-			http.Error(w, fmt.Sprintf("Failed to delete telegram recipient: %v", err), http.StatusInternalServerError)
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusInternalServerError)
+			json.NewEncoder(w).Encode(map[string]string{"error": fmt.Sprintf("Failed to delete telegram recipient: %v", err)})
 			return
 		}
 
@@ -234,26 +280,42 @@ func HandleDeleteTelegramRecipient(store storage.Store) http.HandlerFunc {
 func HandleTestTelegram(store storage.Store, telegramNotifier *TelegramNotifier) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodPost {
-			http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusMethodNotAllowed)
+			json.NewEncoder(w).Encode(map[string]string{"error": "Method not allowed"})
 			return
 		}
 
 		user, ok := r.Context().Value(auth.UserContextKey).(*storage.User)
 		if !ok {
-			http.Error(w, "Unauthorized", http.StatusUnauthorized)
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusUnauthorized)
+			json.NewEncoder(w).Encode(map[string]string{"error": "Unauthorized"})
+			return
+		}
+
+		// Check if notifier is configured
+		if telegramNotifier == nil {
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusServiceUnavailable)
+			json.NewEncoder(w).Encode(map[string]string{"error": "Telegram notifier is not configured"})
 			return
 		}
 
 		// Extract ID from URL path (format: /notifications/telegram/{id}/test)
 		pathParts := strings.Split(strings.Trim(r.URL.Path, "/"), "/")
 		if len(pathParts) < 4 {
-			http.Error(w, "Invalid URL path", http.StatusBadRequest)
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusBadRequest)
+			json.NewEncoder(w).Encode(map[string]string{"error": "Invalid URL path"})
 			return
 		}
 
 		id, err := strconv.Atoi(pathParts[2])
 		if err != nil {
-			http.Error(w, "Invalid telegram recipient ID", http.StatusBadRequest)
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusBadRequest)
+			json.NewEncoder(w).Encode(map[string]string{"error": "Invalid telegram recipient ID"})
 			return
 		}
 
@@ -261,10 +323,14 @@ func HandleTestTelegram(store storage.Store, telegramNotifier *TelegramNotifier)
 		recipient, err := store.GetTelegramRecipient(r.Context(), id, user.ID)
 		if err != nil {
 			if strings.Contains(err.Error(), "not found") {
-				http.Error(w, err.Error(), http.StatusNotFound)
+				w.Header().Set("Content-Type", "application/json")
+				w.WriteHeader(http.StatusNotFound)
+				json.NewEncoder(w).Encode(map[string]string{"error": err.Error()})
 				return
 			}
-			http.Error(w, fmt.Sprintf("Failed to get telegram recipient: %v", err), http.StatusInternalServerError)
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusInternalServerError)
+			json.NewEncoder(w).Encode(map[string]string{"error": fmt.Sprintf("Failed to get telegram recipient: %v", err)})
 			return
 		}
 
@@ -273,7 +339,9 @@ func HandleTestTelegram(store storage.Store, telegramNotifier *TelegramNotifier)
 		defer cancel()
 
 		if err := telegramNotifier.SendTest(ctx, *recipient); err != nil {
-			http.Error(w, fmt.Sprintf("Failed to send test message: %v", err), http.StatusInternalServerError)
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusInternalServerError)
+			json.NewEncoder(w).Encode(map[string]string{"error": fmt.Sprintf("Failed to send test message: %v", err)})
 			return
 		}
 

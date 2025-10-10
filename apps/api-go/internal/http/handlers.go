@@ -135,30 +135,33 @@ func NewRouter(cfg *RouterConfig) *http.ServeMux {
 	})))
 
 	// Telegram notification endpoints (protected)
-	if cfg.TelegramNotifier != nil {
-		mux.Handle("/notifications/telegram", cfg.AuthService.RequireAuth(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			if r.Method == http.MethodGet {
-				notifications.HandleListTelegramRecipients(cfg.Store)(w, r)
-			} else if r.Method == http.MethodPost {
-				notifications.HandleCreateTelegramRecipient(cfg.Store)(w, r)
-			} else {
-				http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
-			}
-		})))
-		mux.Handle("/notifications/telegram/", cfg.AuthService.RequireAuth(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			if strings.HasSuffix(r.URL.Path, "/test") && r.Method == http.MethodPost {
-				notifications.HandleTestTelegram(cfg.Store, cfg.TelegramNotifier)(w, r)
-				return
-			}
-			if r.Method == http.MethodPut {
-				notifications.HandleUpdateTelegramRecipient(cfg.Store)(w, r)
-			} else if r.Method == http.MethodDelete {
-				notifications.HandleDeleteTelegramRecipient(cfg.Store)(w, r)
-			} else {
-				http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
-			}
-		})))
-	}
+	// Always register endpoints regardless of whether TelegramNotifier is configured
+	mux.Handle("/notifications/telegram", cfg.AuthService.RequireAuth(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodGet {
+			notifications.HandleListTelegramRecipients(cfg.Store)(w, r)
+		} else if r.Method == http.MethodPost {
+			notifications.HandleCreateTelegramRecipient(cfg.Store)(w, r)
+		} else {
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusMethodNotAllowed)
+			json.NewEncoder(w).Encode(map[string]string{"error": "Method not allowed"})
+		}
+	})))
+	mux.Handle("/notifications/telegram/", cfg.AuthService.RequireAuth(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if strings.HasSuffix(r.URL.Path, "/test") && r.Method == http.MethodPost {
+			notifications.HandleTestTelegram(cfg.Store, cfg.TelegramNotifier)(w, r)
+			return
+		}
+		if r.Method == http.MethodPut {
+			notifications.HandleUpdateTelegramRecipient(cfg.Store)(w, r)
+		} else if r.Method == http.MethodDelete {
+			notifications.HandleDeleteTelegramRecipient(cfg.Store)(w, r)
+		} else {
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusMethodNotAllowed)
+			json.NewEncoder(w).Encode(map[string]string{"error": "Method not allowed"})
+		}
+	})))
 
 	// Agent endpoints
 	// POST /agent/register - Session authenticated (user registers a new machine)

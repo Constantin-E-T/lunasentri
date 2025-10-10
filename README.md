@@ -98,6 +98,43 @@ lunasentri/
 
 ### Local Development
 
+#### Option 1: Using Development Scripts (Recommended)
+
+The easiest way to run the full stack with proper environment loading:
+
+1. **Clone the repository**
+   ```bash
+   git clone https://github.com/Constantin-E-T/lunasentri.git
+   cd lunasentri
+   ```
+
+2. **Create `.env` file** (optional, for Telegram notifications)
+   ```bash
+   # .env
+   TELEGRAM_BOT_TOKEN=your_bot_token_here
+   ```
+
+3. **Install frontend dependencies**
+   ```bash
+   pnpm install
+   ```
+
+4. **Start everything**
+   ```bash
+   ./scripts/dev/start.sh
+   ```
+   This will:
+   - Load environment variables from `.env`
+   - Start the Go API server on port 80
+   - Start the Next.js frontend on port 3002
+   - Enable Telegram notifications if token is set
+
+5. **Access the dashboard**
+   - Open `http://localhost:3002`
+   - Register a new account (first user becomes admin)
+
+#### Option 2: Manual Setup
+
 1. **Clone the repository**
    ```bash
    git clone https://github.com/Constantin-E-T/lunasentri.git
@@ -130,6 +167,8 @@ lunasentri/
 5. **Access the dashboard**
    - Open `http://localhost:3000`
    - Login with admin credentials: `admin@test.com` / `admin123`
+
+> **Note**: For Telegram notifications, set `TELEGRAM_BOT_TOKEN` environment variable before running the API server. See [scripts/dev/README.md](scripts/dev/README.md) for details.
 
 ### Production Deployment
 
