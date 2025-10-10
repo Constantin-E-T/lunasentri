@@ -5,6 +5,7 @@ This document explains exactly what we did to get your test machine running in p
 ## The Challenge
 
 You wanted to test the agent in production to verify it works with real infrastructure:
+
 - Send real metrics to your production API
 - See the data in your production dashboard
 - Validate the entire system end-to-end
@@ -26,6 +27,7 @@ docker run -d \
 ```
 
 **What this does:**
+
 - Creates a long-running Ubuntu 22.04 container
 - Names it `lunasentri-test-server`
 - Sets hostname to `test-server-01` (what appears in your dashboard)
@@ -41,6 +43,7 @@ docker exec -it lunasentri-test-server bash -c "
 ```
 
 **What this does:**
+
 - Updates package lists
 - Installs `curl` (needed for installer)
 - Installs `systemd` (service management)
@@ -53,11 +56,13 @@ GOOS=linux GOARCH=amd64 go build -o dist/lunasentri-agent .
 ```
 
 **What this does:**
+
 - Cross-compiles the Go agent for Linux x86_64
 - Creates a 9.3MB static binary
 - No runtime dependencies needed
 
 **Why cross-compile?**
+
 - Your Mac is ARM64 (Apple Silicon)
 - Docker containers are x86_64 (standard Linux)
 - `GOOS=linux` tells Go to build for Linux
@@ -71,6 +76,7 @@ docker cp scripts/install.sh lunasentri-test-server:/tmp/
 ```
 
 **What this does:**
+
 - Transfers the agent binary from Mac → Container
 - Transfers the installer script
 - Places them in `/tmp/` for installation
@@ -101,6 +107,7 @@ EOF
 ```
 
 **What this does:**
+
 1. Creates required directories:
    - `/etc/lunasentri/` - Configuration
    - `/var/lib/lunasentri/` - Data storage
@@ -126,6 +133,7 @@ docker exec -it lunasentri-test-server bash -c "
 ```
 
 **What this does:**
+
 - Sets ownership to root
 - Makes config readable by all users
 - Makes binary executable
@@ -141,6 +149,7 @@ docker exec -d lunasentri-test-server bash -c "
 ```
 
 **What this does:**
+
 - Runs the agent in background (`-d` flag)
 - Points it to the config file
 - Redirects all output to log file
@@ -158,6 +167,7 @@ The agent tried to connect but DNS failed:
 ```
 
 **The problem:**
+
 - Config had wrong URL: `api.dev.lunasentri.com`
 - Correct URL: `lunasentri-api.serverplus.org`
 
@@ -177,6 +187,7 @@ EOF
 ```
 
 **What changed:**
+
 - `api.dev.lunasentri.com` → `lunasentri-api.serverplus.org`
 
 ### Step 10: Restarted the Agent
@@ -195,6 +206,7 @@ docker exec -d lunasentri-test-server bash -c "
 ```
 
 **What this does:**
+
 - Kills the old process
 - Clears the old logs
 - Starts fresh with corrected URL
@@ -212,6 +224,7 @@ Checked the logs and saw:
 ```
 
 **What this means:**
+
 - ✅ Agent connected to production API
 - ✅ Authenticated with your API key
 - ✅ Sent system info (hostname, specs)
@@ -279,6 +292,7 @@ Wait 10 seconds
 ### What Shows Up in Your Dashboard
 
 **Machine Info:**
+
 - Hostname: `test-server-01`
 - Platform: Ubuntu 22.04
 - CPU Cores: 8
@@ -287,12 +301,14 @@ Wait 10 seconds
 - Uptime: 2h 9m 17s (as of screenshot)
 
 **Live Metrics:**
+
 - CPU: 0.0% (idle container)
 - Memory: 6.9% (about 550MB used)
 - Disk: 4.3% (about 10GB used)
 - Updated every 10 seconds
 
 **Status Indicators:**
+
 - 🟢 Online (green badge)
 - Last seen: "1s ago" (WebSocket live)
 
@@ -316,6 +332,7 @@ Wait 10 seconds
 ### Limitations (Container vs Real Server)
 
 **What Works:**
+
 - ✅ Metrics collection
 - ✅ API communication
 - ✅ Authentication
@@ -323,6 +340,7 @@ Wait 10 seconds
 - ✅ WebSocket updates
 
 **What Doesn't Work:**
+
 - ❌ systemd service (containers don't run systemd as PID 1)
 - ❌ Automatic startup on boot
 - ❌ systemctl commands
@@ -341,6 +359,7 @@ curl -fsSL https://raw.githubusercontent.com/.../install.sh | \
 ```
 
 **The installer automatically:**
+
 1. Detects their Linux distribution
 2. Downloads the pre-built binary
 3. Creates the lunasentri user
@@ -398,6 +417,7 @@ rm /Users/emiliancon/Desktop/lunasentri/apps/agent/dist/lunasentri-agent
 ## Summary
 
 **What we built:**
+
 - ✅ Complete monitoring agent in Go
 - ✅ Installer script for Linux servers
 - ✅ systemd service integration
@@ -405,6 +425,7 @@ rm /Users/emiliancon/Desktop/lunasentri/apps/agent/dist/lunasentri-agent
 - ✅ Comprehensive documentation
 
 **What we tested:**
+
 - ✅ Binary builds correctly
 - ✅ Connects to production API
 - ✅ Authenticates with API key
@@ -414,6 +435,7 @@ rm /Users/emiliancon/Desktop/lunasentri/apps/agent/dist/lunasentri-agent
 - ✅ Real-time updates work
 
 **What we documented:**
+
 - ✅ Quick Start Guide (for customers)
 - ✅ Implementation Summary (technical details)
 - ✅ Customer Installation (one-pager)

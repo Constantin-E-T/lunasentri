@@ -11,7 +11,7 @@ Get your server monitoring up and running in under 2 minutes! 🚀
 
 ## Getting Your API Key
 
-1. Log in to your LunaSentri dashboard: https://lunasentri-web.serverplus.org
+1. Log in to your LunaSentri dashboard: <https://lunasentri-web.serverplus.org>
 2. Navigate to **Machines** → **Add Machine**
 3. Enter your server's hostname
 4. Copy the generated API key
@@ -83,6 +83,7 @@ sudo tail -f /var/log/lunasentri/agent.log
 ```
 
 You should see JSON logs like:
+
 ```json
 {"level":"info","msg":"LunaSentri agent starting","version":"1.0.0"}
 {"level":"info","msg":"System info collected","hostname":"your-server"}
@@ -91,7 +92,7 @@ You should see JSON logs like:
 
 ## Check Your Dashboard
 
-Go to https://lunasentri-web.serverplus.org/machines and you should see your server appear within 10 seconds! 🎉
+Go to <https://lunasentri-web.serverplus.org/machines> and you should see your server appear within 10 seconds! 🎉
 
 ## Common Commands
 
@@ -132,6 +133,7 @@ system_info_period: 1h     # How often to refresh system info
 ```
 
 After changing the configuration, restart the agent:
+
 ```bash
 sudo systemctl restart lunasentri-agent
 ```
@@ -164,6 +166,7 @@ sudo systemctl daemon-reload
 ### Agent won't start
 
 1. Check the logs:
+
    ```bash
    sudo journalctl -u lunasentri-agent -n 50
    ```
@@ -171,6 +174,7 @@ sudo systemctl daemon-reload
 2. Verify your API key is correct in `/etc/lunasentri/agent.yaml`
 
 3. Test network connectivity:
+
    ```bash
    curl -I https://lunasentri-api.serverplus.org/health
    ```
@@ -178,11 +182,13 @@ sudo systemctl daemon-reload
 ### Metrics not appearing in dashboard
 
 1. Check agent is running:
+
    ```bash
    sudo systemctl status lunasentri-agent
    ```
 
 2. Look for errors in logs:
+
    ```bash
    sudo tail -f /var/log/lunasentri/agent.log
    ```
@@ -192,6 +198,7 @@ sudo systemctl daemon-reload
 ### Permission denied errors
 
 The installer needs root access. Make sure to run with `sudo`:
+
 ```bash
 sudo LUNASENTRI_API_KEY="..." ./install.sh
 ```
@@ -218,8 +225,9 @@ The agent collects and sends:
 ## Support
 
 For issues or questions:
-- GitHub Issues: https://github.com/Constantin-E-T/lunasentri/issues
-- Documentation: https://github.com/Constantin-E-T/lunasentri/tree/main/docs
+
+- GitHub Issues: <https://github.com/Constantin-E-T/lunasentri/issues>
+- Documentation: <https://github.com/Constantin-E-T/lunasentri/tree/main/docs>
 
 ---
 

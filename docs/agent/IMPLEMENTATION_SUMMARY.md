@@ -73,9 +73,11 @@ curl -fsSL https://raw.githubusercontent.com/.../install.sh | \
    - Validates compatibility
 
 2. **User Creation**
+
    ```bash
    useradd -r -s /bin/false -d /var/lib/lunasentri lunasentri
    ```
+
    - Creates dedicated system user (no login shell)
    - Home directory: `/var/lib/lunasentri`
 
@@ -89,6 +91,7 @@ curl -fsSL https://raw.githubusercontent.com/.../install.sh | \
    - Generates config file: `/etc/lunasentri/agent.yaml`
    - Sets permissions: `0644` (readable by all, writable by root)
    - Contains:
+
      ```yaml
      server_url: https://lunasentri-api.serverplus.org
      api_key: <your-key>
@@ -108,6 +111,7 @@ curl -fsSL https://raw.githubusercontent.com/.../install.sh | \
      - `NoNewPrivileges=yes` (no privilege escalation)
 
 6. **Service Activation**
+
    ```bash
    systemctl daemon-reload
    systemctl enable lunasentri-agent
@@ -166,6 +170,7 @@ net.IOCounters(false)
 ### HTTP Request Flow
 
 **Payload Structure:**
+
 ```json
 {
   "hostname": "test-server-01",
@@ -179,6 +184,7 @@ net.IOCounters(false)
 ```
 
 **Request Details:**
+
 ```http
 POST /agent/metrics HTTP/1.1
 Host: lunasentri-api.serverplus.org
@@ -190,12 +196,14 @@ User-Agent: lunasentri-agent/1.0.0
 ```
 
 **Retry Logic:**
+
 - Retries on: 500, 502, 503, 504 (server errors)
 - No retry on: 400, 401, 403, 404 (client errors)
 - Exponential backoff: 5s → 10s → 20s
 - Max retries: 3
 
 **Success Response:**
+
 ```http
 HTTP/1.1 202 Accepted
 Content-Type: application/json
@@ -208,6 +216,7 @@ Content-Type: application/json
 ### How We Tested It
 
 **Environment Setup:**
+
 ```bash
 # Created test Ubuntu container with OrbStack
 docker run -d --name lunasentri-test-server \
@@ -216,6 +225,7 @@ docker run -d --name lunasentri-test-server \
 ```
 
 **Agent Deployment:**
+
 ```bash
 # Built Linux binary
 GOOS=linux GOARCH=amd64 go build -o dist/lunasentri-agent
@@ -235,6 +245,7 @@ EOF
 ```
 
 **Verification:**
+
 - ✅ Agent started successfully
 - ✅ Connected to production API
 - ✅ Sent metrics every 10 seconds
@@ -243,6 +254,7 @@ EOF
 - ✅ Real-time metrics displayed correctly
 
 **Log Output:**
+
 ```json
 {"level":"info","msg":"LunaSentri agent starting","version":"1.0.0"}
 {"level":"info","msg":"System info collected","hostname":"test-server-01","cpu_cores":8}
@@ -254,6 +266,7 @@ EOF
 ### For Real Servers
 
 **Using the installer script:**
+
 ```bash
 curl -fsSL https://raw.githubusercontent.com/Constantin-E-T/lunasentri/main/apps/agent/scripts/install.sh | \
   sudo LUNASENTRI_API_KEY="your-key" \
@@ -262,6 +275,7 @@ curl -fsSL https://raw.githubusercontent.com/Constantin-E-T/lunasentri/main/apps
 ```
 
 **Manual installation:**
+
 1. Build binary: `GOOS=linux GOARCH=amd64 go build`
 2. Copy to server: `scp lunasentri-agent user@server:/usr/local/bin/`
 3. Create config: `/etc/lunasentri/agent.yaml`
@@ -271,16 +285,19 @@ curl -fsSL https://raw.githubusercontent.com/Constantin-E-T/lunasentri/main/apps
 ### Distribution Options
 
 **Option 1: GitHub Releases**
+
 - Upload pre-built binaries for each release
 - Customers download specific version
 - Update installer to fetch from releases
 
 **Option 2: Package Managers**
+
 - Create .deb package (Debian/Ubuntu)
 - Create .rpm package (RHEL/CentOS)
 - Submit to repositories
 
 **Option 3: Docker Image**
+
 - Build: `docker build -t lunasentri/agent:latest`
 - Run: `docker run -d --privileged lunasentri/agent:latest`
 - Requires host metrics access
@@ -288,22 +305,26 @@ curl -fsSL https://raw.githubusercontent.com/Constantin-E-T/lunasentri/main/apps
 ## Security Considerations
 
 ### Data Privacy
+
 - Agent only sends metrics data (no sensitive info)
 - No log files or configuration uploaded
 - API key is only authentication method
 
 ### Network Security
+
 - All communication over HTTPS (TLS 1.2+)
 - Bearer token authentication
 - No incoming connections (agent initiates all requests)
 
 ### System Security
+
 - Runs as non-privileged user (`lunasentri`)
 - Read-only system access
 - No shell access (user has `/bin/false`)
 - Systemd security hardening enabled
 
 ### API Key Management
+
 - Stored in `/etc/lunasentri/agent.yaml`
 - Readable by root and lunasentri user only
 - Not logged (only hashed version in logs)
@@ -314,16 +335,19 @@ curl -fsSL https://raw.githubusercontent.com/Constantin-E-T/lunasentri/main/apps
 ### Log Locations
 
 **systemd journal:**
+
 ```bash
 journalctl -u lunasentri-agent -f
 ```
 
 **Log file:**
+
 ```bash
 tail -f /var/log/lunasentri/agent.log
 ```
 
 **Log Format:**
+
 ```json
 {
   "level": "info",
@@ -340,16 +364,19 @@ tail -f /var/log/lunasentri/agent.log
 ### Key Metrics to Monitor
 
 **Agent Health:**
+
 - Service status: `systemctl status lunasentri-agent`
 - Last log timestamp (should be < 10s old)
 - Error count in logs
 
 **API Communication:**
+
 - HTTP status codes (should be 202)
 - Retry attempts (should be low)
 - Network errors (DNS, timeout)
 
 **System Impact:**
+
 - CPU usage of agent (should be < 1%)
 - Memory usage (should be < 50MB)
 - Network bandwidth (minimal)
@@ -359,6 +386,7 @@ tail -f /var/log/lunasentri/agent.log
 ### Common Issues
 
 **1. Agent won't start**
+
 ```bash
 # Check logs
 journalctl -u lunasentri-agent -n 50
@@ -370,6 +398,7 @@ journalctl -u lunasentri-agent -n 50
 ```
 
 **2. No metrics in dashboard**
+
 ```bash
 # Verify agent is running
 systemctl status lunasentri-agent
@@ -382,6 +411,7 @@ curl -I https://lunasentri-api.serverplus.org/health
 ```
 
 **3. High retry count**
+
 ```bash
 # Check for:
 # - Network issues
@@ -419,6 +449,7 @@ journalctl -u lunasentri-agent -f | grep -i retry
 ## Technical Specifications
 
 ### System Requirements
+
 - **OS:** Linux (kernel 3.10+)
 - **Architecture:** x86_64 (amd64)
 - **Memory:** 50MB minimum
@@ -426,6 +457,7 @@ journalctl -u lunasentri-agent -f | grep -i retry
 - **Network:** Outbound HTTPS (443)
 
 ### Performance Characteristics
+
 - **Binary Size:** 9.3 MB (static compilation)
 - **Memory Usage:** ~30-40 MB runtime
 - **CPU Usage:** <0.5% average
@@ -433,6 +465,7 @@ journalctl -u lunasentri-agent -f | grep -i retry
 - **Startup Time:** <1 second
 
 ### Dependencies
+
 - **Go Runtime:** Compiled as static binary (no runtime needed)
 - **gopsutil:** v4.25.9 (embedded)
 - **System Libraries:** None (static linking)

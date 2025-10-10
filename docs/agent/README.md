@@ -47,15 +47,19 @@ Complete documentation for the LunaSentri monitoring agent.
 ## 🚀 Quick Links
 
 ### For New Customers
+
 Start here: [CUSTOMER_INSTALLATION.md](./CUSTOMER_INSTALLATION.md)
 
 ### For Technical Users
+
 Start here: [QUICK_START.md](./QUICK_START.md)
 
 ### For Developers
+
 Start here: [IMPLEMENTATION_SUMMARY.md](./IMPLEMENTATION_SUMMARY.md)
 
 ### For Testing/QA
+
 Start here: [TEST_MACHINE_WALKTHROUGH.md](./TEST_MACHINE_WALKTHROUGH.md)
 
 ## 📋 What Each Document Covers
@@ -71,21 +75,27 @@ Start here: [TEST_MACHINE_WALKTHROUGH.md](./TEST_MACHINE_WALKTHROUGH.md)
 ## 🎯 Use Cases
 
 ### "I'm a customer and want to install the agent"
+
 → [CUSTOMER_INSTALLATION.md](./CUSTOMER_INSTALLATION.md)
 
 ### "I need to troubleshoot an installation issue"
+
 → [QUICK_START.md](./QUICK_START.md) (Troubleshooting section)
 
 ### "I want to understand how the agent works"
+
 → [IMPLEMENTATION_SUMMARY.md](./IMPLEMENTATION_SUMMARY.md)
 
 ### "I need to know what configuration options exist"
+
 → [QUICK_START.md](./QUICK_START.md) (Configuration section)
 
 ### "I want to see how you tested it"
+
 → [TEST_MACHINE_WALKTHROUGH.md](./TEST_MACHINE_WALKTHROUGH.md)
 
 ### "I need all the details"
+
 → [INSTALLATION.md](./INSTALLATION.md)
 
 ## 🔗 Related Documentation
@@ -119,6 +129,7 @@ The LunaSentri agent is a lightweight Go application that:
 ## 📝 Next Steps
 
 1. **Push agent code to GitHub** (if not already done)
+
    ```bash
    git add apps/agent docs/agent
    git commit -m "Add LunaSentri monitoring agent v1.0.0"
