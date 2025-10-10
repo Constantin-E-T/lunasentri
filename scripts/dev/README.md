@@ -11,6 +11,7 @@ This directory contains helper scripts to run the LunaSentri development environ
 ```
 
 This will:
+
 - Load environment variables from `.env` (including `TELEGRAM_BOT_TOKEN`)
 - Start the Go API server on port 80
 - Start the Next.js frontend on port 3002
@@ -25,6 +26,7 @@ This will:
 ```
 
 Starts the Go API server on port 80 with:
+
 - Environment variables loaded from `../../.env`
 - Default development settings
 - Telegram notifications enabled (if `TELEGRAM_BOT_TOKEN` is set)
@@ -83,6 +85,7 @@ cat .env | grep TELEGRAM_BOT_TOKEN
 ```
 
 When the API starts, you should see:
+
 ```
 Telegram notifications enabled
 ```

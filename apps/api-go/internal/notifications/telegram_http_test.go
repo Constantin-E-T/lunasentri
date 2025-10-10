@@ -16,13 +16,13 @@ import (
 
 // mockTelegramStore implements storage.Store for testing
 type mockTelegramStore struct {
-	telegramRecipients    map[int][]storage.TelegramRecipient // userID -> recipients
-	nextTelegramID        int
-	failCreate            bool
-	failList              bool
-	failUpdate            bool
-	failDelete            bool
-	failGet               bool
+	telegramRecipients map[int][]storage.TelegramRecipient // userID -> recipients
+	nextTelegramID     int
+	failCreate         bool
+	failList           bool
+	failUpdate         bool
+	failDelete         bool
+	failGet            bool
 }
 
 func newMockTelegramStore() *mockTelegramStore {

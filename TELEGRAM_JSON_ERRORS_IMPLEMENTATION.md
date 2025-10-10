@@ -9,10 +9,12 @@ Successfully implemented JSON error responses for all Telegram notification endp
 ### 1. Router Updates (`apps/api-go/internal/http/handlers.go`)
 
 **Before:**
+
 - Telegram endpoints were only registered if `cfg.TelegramNotifier != nil`
 - Used `http.Error()` for error responses (plain text)
 
 **After:**
+
 - **Always register** `/notifications/telegram` and `/notifications/telegram/*` endpoints
 - Return JSON errors using `json.NewEncoder(w).Encode(map[string]string{"error": "..."})`
 - Endpoints work for list/create/update/delete operations even when notifier is nil
@@ -23,12 +25,14 @@ Successfully implemented JSON error responses for all Telegram notification endp
 Converted all error responses from plain text to JSON format:
 
 #### HandleListTelegramRecipients
+
 - ✅ Method not allowed: JSON response
 - ✅ Unauthorized: JSON response
 - ✅ Storage failures: JSON response
 - ✅ Success: Already returns JSON
 
 #### HandleCreateTelegramRecipient
+
 - ✅ Method not allowed: JSON response
 - ✅ Unauthorized: JSON response
 - ✅ Invalid request body: JSON response
@@ -38,6 +42,7 @@ Converted all error responses from plain text to JSON format:
 - ✅ **Works when notifier is nil** - storage operations succeed
 
 #### HandleUpdateTelegramRecipient
+
 - ✅ Method not allowed: JSON response
 - ✅ Unauthorized: JSON response
 - ✅ Invalid URL path: JSON response
@@ -48,6 +53,7 @@ Converted all error responses from plain text to JSON format:
 - ✅ Storage failures: JSON response
 
 #### HandleDeleteTelegramRecipient
+
 - ✅ Method not allowed: JSON response
 - ✅ Unauthorized: JSON response
 - ✅ Invalid URL path: JSON response
@@ -56,6 +62,7 @@ Converted all error responses from plain text to JSON format:
 - ✅ Storage failures: JSON response
 
 #### HandleTestTelegram
+
 - ✅ Method not allowed: JSON response
 - ✅ Unauthorized: JSON response
 - ✅ **503 Service Unavailable when notifier is nil** (main requirement)
@@ -70,12 +77,14 @@ Converted all error responses from plain text to JSON format:
 Created comprehensive test suite with **22 test cases** covering:
 
 #### TestHandleListTelegramRecipients (4 tests)
+
 - ✅ Successful list with recipients
 - ✅ Successful list with no recipients
 - ✅ Method not allowed (returns JSON error)
 - ✅ Storage failure (returns JSON error)
 
 #### TestHandleCreateTelegramRecipient (5 tests)
+
 - ✅ **Successful create when notifier is nil** (main requirement)
 - ✅ Invalid chat_id - not numeric (returns JSON error)
 - ✅ Missing chat_id (returns JSON error)
@@ -83,16 +92,19 @@ Created comprehensive test suite with **22 test cases** covering:
 - ✅ Invalid JSON body (returns JSON error)
 
 #### TestHandleTestTelegram (3 tests)
+
 - ✅ **Notifier not configured - returns 503** (main requirement)
 - ✅ Recipient not found - still returns 503 when notifier nil
 - ✅ Invalid recipient ID - still returns 503 when notifier nil
 
 #### TestHandleUpdateTelegramRecipient (3 tests)
+
 - ✅ Successful update - toggle is_active
 - ✅ Recipient not found (returns JSON error)
 - ✅ Invalid recipient ID (returns JSON error)
 
 #### TestHandleDeleteTelegramRecipient (3 tests)
+
 - ✅ Successful delete
 - ✅ Recipient not found (returns JSON error)
 - ✅ Invalid recipient ID (returns JSON error)
@@ -149,20 +161,24 @@ $ go build -o /dev/null ./cmd/api/main.go
 ## Compliance with Requirements
 
 ### ✅ Task 1: Always register endpoints
+
 - `/notifications/telegram` (GET/POST) registered regardless of notifier configuration
 - `/notifications/telegram/{id}` (PUT/DELETE) registered regardless of notifier configuration
 - `/notifications/telegram/{id}/test` (POST) registered regardless of notifier configuration
 
 ### ✅ Task 2: Test endpoint returns 503 when notifier is nil
+
 - `HandleTestTelegram` checks `if telegramNotifier == nil` at the beginning
 - Returns `503 Service Unavailable` with JSON: `{"error": "Telegram notifier is not configured"}`
 
 ### ✅ Task 3: All handlers return JSON on error
+
 - Replaced all `http.Error()` calls with proper JSON responses
 - All errors set `Content-Type: application/json` header
 - Error responses follow pattern: `{"error": "message"}`
 
 ### ✅ Task 4: Test coverage for all scenarios
+
 - POST succeeds when notifier is nil ✓
 - Hitting `/notifications/telegram` without notifier works ✓
 - `/notifications/telegram/{id}/test` returns 503 if notifier nil ✓
@@ -171,6 +187,7 @@ $ go build -o /dev/null ./cmd/api/main.go
 ## API Behavior Examples
 
 ### Creating a Telegram recipient (notifier can be nil)
+
 ```bash
 POST /notifications/telegram
 Content-Type: application/json
@@ -191,6 +208,7 @@ Content-Type: application/json
 ```
 
 ### Testing a recipient (requires notifier)
+
 ```bash
 POST /notifications/telegram/1/test
 
@@ -201,6 +219,7 @@ POST /notifications/telegram/1/test
 ```
 
 ### Error response example
+
 ```bash
 POST /notifications/telegram
 Content-Type: application/json

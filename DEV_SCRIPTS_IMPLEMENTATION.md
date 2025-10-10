@@ -9,6 +9,7 @@ Created a set of shell scripts to simplify local development by properly loading
 The previous one-liner command for starting the API server didn't read the `.env` file, so `TELEGRAM_BOT_TOKEN` remained unset and Telegram notifications were disabled.
 
 **Before:**
+
 ```bash
 # TELEGRAM_BOT_TOKEN was never loaded
 lsof -ti:80 | xargs kill -9 2>/dev/null; sleep 1; \
@@ -19,6 +20,7 @@ lsof -ti:80 | xargs kill -9 2>/dev/null; sleep 1; \
 ```
 
 **After:**
+
 ```bash
 # Properly loads .env and all environment variables
 ./scripts/dev/start.sh
@@ -27,9 +29,11 @@ lsof -ti:80 | xargs kill -9 2>/dev/null; sleep 1; \
 ## Files Created
 
 ### 1. `scripts/dev/run-api.sh`
+
 **Purpose:** Start the Go API server with proper environment loading
 
 **Features:**
+
 - ✅ Kills existing processes on port 80
 - ✅ Changes to `apps/api-go` directory
 - ✅ Loads all environment variables from `../../.env` (repository root)
@@ -37,11 +41,13 @@ lsof -ti:80 | xargs kill -9 2>/dev/null; sleep 1; \
 - ✅ Uses `set -euo pipefail` for safer script execution
 
 **Usage:**
+
 ```bash
 ./scripts/dev/run-api.sh
 ```
 
 **Environment Variables:**
+
 - Loaded from `.env`: `TELEGRAM_BOT_TOKEN`, etc.
 - Default values (can be overridden):
   - `AUTH_JWT_SECRET=dev-secret`
@@ -50,23 +56,28 @@ lsof -ti:80 | xargs kill -9 2>/dev/null; sleep 1; \
   - `CORS_ALLOWED_ORIGIN=http://localhost:3002`
 
 ### 2. `scripts/dev/run-web.sh`
+
 **Purpose:** Start the Next.js frontend
 
 **Features:**
+
 - ✅ Kills existing processes on port 3002
 - ✅ Changes to `apps/web-next` directory
 - ✅ Loads environment variables from `../../.env`
 - ✅ Runs `npm run dev -- --port 3002`
 
 **Usage:**
+
 ```bash
 ./scripts/dev/run-web.sh
 ```
 
 ### 3. `scripts/dev/start.sh`
+
 **Purpose:** Master script to run both API and frontend together
 
 **Features:**
+
 - ✅ Starts both services in parallel
 - ✅ Shows startup messages
 - ✅ Checks for `.env` file existence
@@ -74,11 +85,13 @@ lsof -ti:80 | xargs kill -9 2>/dev/null; sleep 1; \
 - ✅ Trap handlers for proper cleanup
 
 **Usage:**
+
 ```bash
 ./scripts/dev/start.sh
 ```
 
 **Output:**
+
 ```
 🚀 Starting LunaSentri development environment...
 
@@ -93,9 +106,11 @@ Press Ctrl+C to stop all services
 ```
 
 ### 4. `scripts/dev/README.md`
+
 **Purpose:** Comprehensive documentation for the development scripts
 
 **Contents:**
+
 - Quick start guide
 - Individual script usage
 - Environment variable documentation
@@ -105,6 +120,7 @@ Press Ctrl+C to stop all services
 ## Verification
 
 ### Test 1: API Server with Telegram Enabled
+
 ```bash
 $ ./scripts/dev/run-api.sh
 
@@ -120,6 +136,7 @@ $ ./scripts/dev/run-api.sh
 **Success!** The log shows `Telegram notifications enabled` confirming that `TELEGRAM_BOT_TOKEN` was properly loaded.
 
 ### Test 2: Telegram Message Delivery
+
 ```bash
 2025/10/10 05:57:01 [TELEGRAM] delivered to chat_id=8385128848 ✅
 ```
@@ -140,6 +157,7 @@ fi
 ```
 
 This pattern:
+
 1. Checks if `.env` exists
 2. Enables auto-export mode (`set -a`)
 3. Sources the `.env` file (all variables become exported)
@@ -148,19 +166,23 @@ This pattern:
 ### Path Resolution
 
 Scripts use relative paths from `scripts/dev/` to the project root:
+
 - `../../.env` → Repository root `.env` file
 - Changes to absolute paths for `apps/api-go` and `apps/web-next`
 
 ## Updated Documentation
 
 ### Main README.md
+
 Updated the "Local Development" section to:
+
 1. **Recommend the scripts first** (Option 1)
 2. Keep manual setup as Option 2
 3. Note about Telegram notifications requiring `TELEGRAM_BOT_TOKEN`
 4. Link to `scripts/dev/README.md` for details
 
 ### Quick Start Flow
+
 ```
 1. Clone repo
 2. Create .env (optional)
@@ -184,6 +206,7 @@ Updated the "Local Development" section to:
 ### For Existing Developers
 
 **Old terminal commands:**
+
 ```bash
 # Terminal 1
 cd apps/api-go && AUTH_JWT_SECRET=... go run cmd/api/main.go
@@ -193,6 +216,7 @@ cd apps/web-next && npm run dev
 ```
 
 **New simplified workflow:**
+
 ```bash
 ./scripts/dev/start.sh
 ```
@@ -200,6 +224,7 @@ cd apps/web-next && npm run dev
 ### Environment Variables
 
 Move all configuration to `.env`:
+
 ```properties
 # .env
 TELEGRAM_BOT_TOKEN=your_token_here
