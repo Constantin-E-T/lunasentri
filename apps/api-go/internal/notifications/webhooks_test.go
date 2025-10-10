@@ -183,7 +183,7 @@ func (m *mockStore) UpdateTelegramDeliveryState(ctx context.Context, id int, las
 }
 
 // Machine methods (not implemented for these tests)
-func (m *mockStore) CreateMachine(ctx context.Context, userID int, name, hostname, apiKeyHash string) (*storage.Machine, error) {
+func (m *mockStore) CreateMachine(ctx context.Context, userID int, name, hostname, description, apiKeyHash string) (*storage.Machine, error) {
 	return nil, fmt.Errorf("not implemented")
 }
 func (m *mockStore) GetMachineByID(ctx context.Context, id int) (*storage.Machine, error) {
@@ -199,6 +199,9 @@ func (m *mockStore) UpdateMachineStatus(ctx context.Context, id int, status stri
 	return fmt.Errorf("not implemented")
 }
 func (m *mockStore) UpdateMachineSystemInfo(ctx context.Context, id int, info storage.MachineSystemInfoUpdate) error {
+	return fmt.Errorf("not implemented")
+}
+func (m *mockStore) UpdateMachineDetails(ctx context.Context, id int, updates map[string]interface{}) error {
 	return fmt.Errorf("not implemented")
 }
 func (m *mockStore) DeleteMachine(ctx context.Context, id int, userID int) error {

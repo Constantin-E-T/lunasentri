@@ -1,6 +1,6 @@
 # Multi-Machine Monitoring - Implementation Roadmap
 
-**Status**: Planning Phase
+**Status**: Phase 2 Complete – Agent live in production
 **Priority**: High (Critical Feature Gap)
 **Estimated Effort**: 3-4 weeks
 
@@ -12,6 +12,13 @@
 - **Week 2**: Build read-only Go agent (HTTPS POST + checksum), ship install script, add revocation path; no mTLS yet.
 - **Week 3**: Frontend machine selector + onboarding UI; hide legacy host metrics behind `LOCAL_HOST_METRICS` flag and require machine selection.
 - **Deferred**: WebSocket streaming, bulk performance tuning, supply-chain automation, mTLS PKI—log them in “Post-MVP Hardening” once MVP is live.
+
+## Current Status (2025-10-10)
+
+- ✅ Phase 1 (backend foundation) and Phase 2 (agent development) are complete and deployed to production.
+- ✅ Customers can install the `lunasentri-agent` on Linux hosts via the installer script or Docker image; metrics are flowing to `/agent/metrics`.
+- ✅ Documentation package published under `docs/agent/` (customer quick start, detailed installation, architecture summary).
+- 🚧 Phase 3 (ingestion hardening, retention, heartbeat alerts) is the next active focus; see open tasks below.
 
 ## Problem Statement
 

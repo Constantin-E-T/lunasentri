@@ -30,7 +30,7 @@ func TestMachineService(t *testing.T) {
 	}
 
 	t.Run("RegisterMachine", func(t *testing.T) {
-		machine, apiKey, err := service.RegisterMachine(ctx, user.ID, "my-server", "server.example.com")
+		machine, apiKey, err := service.RegisterMachine(ctx, user.ID, "my-server", "server.example.com", "Primary test machine")
 		if err != nil {
 			t.Fatalf("Failed to register machine: %v", err)
 		}
@@ -59,7 +59,7 @@ func TestMachineService(t *testing.T) {
 	})
 
 	t.Run("GetMachine", func(t *testing.T) {
-		machine, _, err := service.RegisterMachine(ctx, user.ID, "get-test", "get.com")
+		machine, _, err := service.RegisterMachine(ctx, user.ID, "get-test", "get.com", "")
 		if err != nil {
 			t.Fatalf("Failed to register machine: %v", err)
 		}
@@ -80,7 +80,7 @@ func TestMachineService(t *testing.T) {
 			t.Fatalf("Failed to create user2: %v", err)
 		}
 
-		machine, _, err := service.RegisterMachine(ctx, user.ID, "protected", "protected.com")
+		machine, _, err := service.RegisterMachine(ctx, user.ID, "protected", "protected.com", "")
 		if err != nil {
 			t.Fatalf("Failed to register machine: %v", err)
 		}
@@ -94,8 +94,8 @@ func TestMachineService(t *testing.T) {
 
 	t.Run("ListMachines", func(t *testing.T) {
 		// Register a few machines
-		service.RegisterMachine(ctx, user.ID, "server-1", "s1.com")
-		service.RegisterMachine(ctx, user.ID, "server-2", "s2.com")
+		service.RegisterMachine(ctx, user.ID, "server-1", "s1.com", "")
+		service.RegisterMachine(ctx, user.ID, "server-2", "s2.com", "")
 
 		machines, err := service.ListMachines(ctx, user.ID)
 		if err != nil {
@@ -108,7 +108,7 @@ func TestMachineService(t *testing.T) {
 	})
 
 	t.Run("AuthenticateMachine", func(t *testing.T) {
-		_, apiKey, err := service.RegisterMachine(ctx, user.ID, "auth-test", "auth.com")
+		_, apiKey, err := service.RegisterMachine(ctx, user.ID, "auth-test", "auth.com", "")
 		if err != nil {
 			t.Fatalf("Failed to register machine: %v", err)
 		}
@@ -130,7 +130,7 @@ func TestMachineService(t *testing.T) {
 	})
 
 	t.Run("RecordMetrics", func(t *testing.T) {
-		machine, _, err := service.RegisterMachine(ctx, user.ID, "metrics-test", "metrics.com")
+		machine, _, err := service.RegisterMachine(ctx, user.ID, "metrics-test", "metrics.com", "")
 		if err != nil {
 			t.Fatalf("Failed to register machine: %v", err)
 		}
@@ -157,7 +157,7 @@ func TestMachineService(t *testing.T) {
 	})
 
 	t.Run("RecordMetricsWithSystemInfo", func(t *testing.T) {
-		machine, _, err := service.RegisterMachine(ctx, user.ID, "system-info-test", "sys.example.com")
+		machine, _, err := service.RegisterMachine(ctx, user.ID, "system-info-test", "sys.example.com", "")
 		if err != nil {
 			t.Fatalf("Failed to register machine: %v", err)
 		}
@@ -227,7 +227,7 @@ func TestMachineService(t *testing.T) {
 	})
 
 	t.Run("GetLatestMetrics", func(t *testing.T) {
-		machine, _, err := service.RegisterMachine(ctx, user.ID, "latest-test", "latest.com")
+		machine, _, err := service.RegisterMachine(ctx, user.ID, "latest-test", "latest.com", "Latest metrics machine")
 		if err != nil {
 			t.Fatalf("Failed to register machine: %v", err)
 		}
@@ -249,7 +249,7 @@ func TestMachineService(t *testing.T) {
 	})
 
 	t.Run("GetMetricsHistory", func(t *testing.T) {
-		machine, _, err := service.RegisterMachine(ctx, user.ID, "history-test", "history.com")
+		machine, _, err := service.RegisterMachine(ctx, user.ID, "history-test", "history.com", "History metrics machine")
 		if err != nil {
 			t.Fatalf("Failed to register machine: %v", err)
 		}
@@ -296,7 +296,7 @@ func TestMachineService(t *testing.T) {
 	})
 
 	t.Run("DeleteMachine", func(t *testing.T) {
-		machine, _, err := service.RegisterMachine(ctx, user.ID, "delete-test", "delete.com")
+		machine, _, err := service.RegisterMachine(ctx, user.ID, "delete-test", "delete.com", "Delete test machine")
 		if err != nil {
 			t.Fatalf("Failed to register machine: %v", err)
 		}
@@ -414,7 +414,7 @@ func TestGetMachineWithComputedStatus(t *testing.T) {
 	}
 
 	// Register machine
-	machine, _, err := service.RegisterMachine(ctx, user.ID, "status-test", "status.local")
+	machine, _, err := service.RegisterMachine(ctx, user.ID, "status-test", "status.local", "Status computation machine")
 	if err != nil {
 		t.Fatalf("Failed to register machine: %v", err)
 	}
@@ -465,12 +465,12 @@ func TestListMachinesWithComputedStatus(t *testing.T) {
 	}
 
 	// Register multiple machines
-	machine1, _, err := service.RegisterMachine(ctx, user.ID, "machine1", "m1.local")
+	machine1, _, err := service.RegisterMachine(ctx, user.ID, "machine1", "m1.local", "First machine")
 	if err != nil {
 		t.Fatalf("Failed to register machine1: %v", err)
 	}
 
-	machine2, _, err := service.RegisterMachine(ctx, user.ID, "machine2", "m2.local")
+	machine2, _, err := service.RegisterMachine(ctx, user.ID, "machine2", "m2.local", "Second machine")
 	if err != nil {
 		t.Fatalf("Failed to register machine2: %v", err)
 	}

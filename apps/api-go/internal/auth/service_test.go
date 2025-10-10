@@ -294,8 +294,8 @@ func (m *mockStore) UpdateTelegramDeliveryState(ctx context.Context, id int, las
 }
 
 // Machine methods (stub implementations for testing)
-func (m *mockStore) CreateMachine(ctx context.Context, userID int, name, hostname, apiKeyHash string) (*storage.Machine, error) {
-	return &storage.Machine{ID: 1, UserID: userID, Name: name, Hostname: hostname, APIKey: apiKeyHash, Status: "offline"}, nil
+func (m *mockStore) CreateMachine(ctx context.Context, userID int, name, hostname, description, apiKeyHash string) (*storage.Machine, error) {
+	return &storage.Machine{ID: 1, UserID: userID, Name: name, Hostname: hostname, Description: description, APIKey: apiKeyHash, Status: "offline"}, nil
 }
 
 func (m *mockStore) GetMachineByID(ctx context.Context, id int) (*storage.Machine, error) {
@@ -315,6 +315,10 @@ func (m *mockStore) UpdateMachineStatus(ctx context.Context, id int, status stri
 }
 
 func (m *mockStore) UpdateMachineSystemInfo(ctx context.Context, id int, info storage.MachineSystemInfoUpdate) error {
+	return nil
+}
+
+func (m *mockStore) UpdateMachineDetails(ctx context.Context, id int, updates map[string]interface{}) error {
 	return nil
 }
 

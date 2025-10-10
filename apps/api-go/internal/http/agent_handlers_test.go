@@ -179,7 +179,7 @@ func TestAgentMetrics(t *testing.T) {
 		t.Fatalf("Failed to create user: %v", err)
 	}
 
-	machine, apiKey, err := machineService.RegisterMachine(ctx, user.ID, "test-machine", "test.local")
+	machine, apiKey, err := machineService.RegisterMachine(ctx, user.ID, "test-machine", "test.local", "Agent test machine")
 	if err != nil {
 		t.Fatalf("Failed to register machine: %v", err)
 	}
@@ -353,7 +353,7 @@ func TestAPIKeyMiddleware(t *testing.T) {
 		t.Fatalf("Failed to create user: %v", err)
 	}
 
-	machine, apiKey, err := machineService.RegisterMachine(ctx, user.ID, "middleware-test", "test.local")
+	machine, apiKey, err := machineService.RegisterMachine(ctx, user.ID, "middleware-test", "test.local", "Middleware test machine")
 	if err != nil {
 		t.Fatalf("Failed to register machine: %v", err)
 	}
@@ -427,18 +427,18 @@ func TestListMachines(t *testing.T) {
 	}
 
 	// Register machines for first user
-	machine1, _, err := machineService.RegisterMachine(ctx, userID, "machine-1", "host-1.example.com")
+	machine1, _, err := machineService.RegisterMachine(ctx, userID, "machine-1", "host-1.example.com", "First user machine")
 	if err != nil {
 		t.Fatalf("Failed to register machine 1: %v", err)
 	}
 
-	machine2, _, err := machineService.RegisterMachine(ctx, userID, "machine-2", "host-2.example.com")
+	machine2, _, err := machineService.RegisterMachine(ctx, userID, "machine-2", "host-2.example.com", "Second user machine")
 	if err != nil {
 		t.Fatalf("Failed to register machine 2: %v", err)
 	}
 
 	// Register machine for other user (should not appear in response)
-	_, _, err = machineService.RegisterMachine(ctx, otherUser.ID, "other-machine", "other.example.com")
+	_, _, err = machineService.RegisterMachine(ctx, otherUser.ID, "other-machine", "other.example.com", "Other user machine")
 	if err != nil {
 		t.Fatalf("Failed to register other machine: %v", err)
 	}

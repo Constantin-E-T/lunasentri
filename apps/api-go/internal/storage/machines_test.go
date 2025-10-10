@@ -27,7 +27,7 @@ func TestMachineOperations(t *testing.T) {
 	}
 
 	t.Run("CreateMachine", func(t *testing.T) {
-		machine, err := store.CreateMachine(ctx, user.ID, "test-machine", "test.example.com", "hashed-api-key-123")
+		machine, err := store.CreateMachine(ctx, user.ID, "test-machine", "test.example.com", "Primary test machine", "hashed-api-key-123")
 		if err != nil {
 			t.Fatalf("Failed to create machine: %v", err)
 		}
@@ -48,7 +48,7 @@ func TestMachineOperations(t *testing.T) {
 
 	t.Run("GetMachineByID", func(t *testing.T) {
 		// Create a machine
-		created, err := store.CreateMachine(ctx, user.ID, "machine-2", "host2.com", "key-456")
+		created, err := store.CreateMachine(ctx, user.ID, "machine-2", "host2.com", "Second test machine", "key-456")
 		if err != nil {
 			t.Fatalf("Failed to create machine: %v", err)
 		}
@@ -69,7 +69,7 @@ func TestMachineOperations(t *testing.T) {
 
 	t.Run("GetMachineByAPIKey", func(t *testing.T) {
 		apiKeyHash := "unique-hash-789"
-		created, err := store.CreateMachine(ctx, user.ID, "machine-3", "host3.com", apiKeyHash)
+		created, err := store.CreateMachine(ctx, user.ID, "machine-3", "host3.com", "Third test machine", apiKeyHash)
 		if err != nil {
 			t.Fatalf("Failed to create machine: %v", err)
 		}
@@ -92,12 +92,12 @@ func TestMachineOperations(t *testing.T) {
 		}
 
 		// Create machines for both users
-		_, err = store.CreateMachine(ctx, user.ID, "user1-machine1", "host1.com", "key-user1-1")
+		_, err = store.CreateMachine(ctx, user.ID, "user1-machine1", "host1.com", "User one machine", "key-user1-1")
 		if err != nil {
 			t.Fatalf("Failed to create machine: %v", err)
 		}
 
-		_, err = store.CreateMachine(ctx, user2.ID, "user2-machine1", "host2.com", "key-user2-1")
+		_, err = store.CreateMachine(ctx, user2.ID, "user2-machine1", "host2.com", "User two machine", "key-user2-1")
 		if err != nil {
 			t.Fatalf("Failed to create machine: %v", err)
 		}
@@ -122,7 +122,7 @@ func TestMachineOperations(t *testing.T) {
 	})
 
 	t.Run("UpdateMachineStatus", func(t *testing.T) {
-		machine, err := store.CreateMachine(ctx, user.ID, "status-test", "status.com", "key-status")
+		machine, err := store.CreateMachine(ctx, user.ID, "status-test", "status.com", "Status machine", "key-status")
 		if err != nil {
 			t.Fatalf("Failed to create machine: %v", err)
 		}
@@ -149,7 +149,7 @@ func TestMachineOperations(t *testing.T) {
 	})
 
 	t.Run("DeleteMachine", func(t *testing.T) {
-		machine, err := store.CreateMachine(ctx, user.ID, "delete-test", "delete.com", "key-delete")
+		machine, err := store.CreateMachine(ctx, user.ID, "delete-test", "delete.com", "Delete machine", "key-delete")
 		if err != nil {
 			t.Fatalf("Failed to create machine: %v", err)
 		}
@@ -172,7 +172,7 @@ func TestMachineOperations(t *testing.T) {
 			t.Fatalf("Failed to create user3: %v", err)
 		}
 
-		machine, err := store.CreateMachine(ctx, user.ID, "protected-machine", "protected.com", "key-protected")
+		machine, err := store.CreateMachine(ctx, user.ID, "protected-machine", "protected.com", "Protected machine", "key-protected")
 		if err != nil {
 			t.Fatalf("Failed to create machine: %v", err)
 		}
@@ -213,7 +213,7 @@ func TestMetricsOperations(t *testing.T) {
 		t.Fatalf("Failed to create user: %v", err)
 	}
 
-	machine, err := store.CreateMachine(ctx, user.ID, "metrics-machine", "metrics.com", "key-metrics")
+	machine, err := store.CreateMachine(ctx, user.ID, "metrics-machine", "metrics.com", "Metrics machine", "key-metrics")
 	if err != nil {
 		t.Fatalf("Failed to create machine: %v", err)
 	}
@@ -248,7 +248,7 @@ func TestMetricsOperations(t *testing.T) {
 
 	t.Run("GetMetricsHistory", func(t *testing.T) {
 		// Create a new machine for this test to avoid interference
-		machine2, err := store.CreateMachine(ctx, user.ID, "history-machine", "history.com", "key-history")
+		machine2, err := store.CreateMachine(ctx, user.ID, "history-machine", "history.com", "History machine", "key-history")
 		if err != nil {
 			t.Fatalf("Failed to create machine: %v", err)
 		}
@@ -285,7 +285,7 @@ func TestMetricsOperations(t *testing.T) {
 
 	t.Run("CascadeDelete", func(t *testing.T) {
 		// Create machine with metrics
-		machine3, err := store.CreateMachine(ctx, user.ID, "cascade-test", "cascade.com", "key-cascade")
+		machine3, err := store.CreateMachine(ctx, user.ID, "cascade-test", "cascade.com", "Cascade machine", "key-cascade")
 		if err != nil {
 			t.Fatalf("Failed to create machine: %v", err)
 		}
