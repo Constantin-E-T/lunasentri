@@ -166,6 +166,9 @@ func NewRouter(cfg *RouterConfig) *http.ServeMux {
 	// POST /agent/metrics - API key authenticated (agent pushes metrics)
 	mux.Handle("/agent/metrics", RequireAPIKey(cfg.MachineService)(http.HandlerFunc(handleAgentMetrics(cfg.MachineService))))
 
+	// Machine management endpoints (session authenticated)
+	mux.Handle("/machines", cfg.AuthService.RequireAuth(handleListMachines(cfg.MachineService)))
+
 	return mux
 }
 

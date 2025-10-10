@@ -358,3 +358,75 @@ export async function testTelegramRecipient(id: number): Promise<TestTelegramRes
   });
 }
 
+// Machine Management API
+
+export interface Machine {
+  id: number;
+  user_id: number;
+  name: string;
+  hostname: string;
+  status: 'online' | 'offline';
+  last_seen: string;
+  created_at: string;
+}
+
+export interface RegisterMachineRequest {
+  name: string;
+  hostname?: string;
+}
+
+export interface RegisterMachineResponse {
+  id: number;
+  name: string;
+  hostname: string;
+  api_key: string; // Only returned once during registration
+  created_at: string;
+}
+
+/**
+ * Register a new machine for the authenticated user.
+ * Returns a one-time API key that must be saved immediately.
+ */
+export async function registerMachine(data: RegisterMachineRequest): Promise<RegisterMachineResponse> {
+  return request<RegisterMachineResponse>(`${API_URL}/agent/register`, {
+    method: 'POST',
+    body: JSON.stringify(data),
+  });
+}
+
+/**
+ * List all machines owned by the authenticated user.
+ * Status is computed in real-time based on last_seen timestamp.
+ */
+export async function listMachines(): Promise<Machine[]> {
+  return request<Machine[]>(`${API_URL}/machines`);
+}
+
+/**
+ * Get details of a specific machine.
+ */
+export async function getMachine(id: number): Promise<Machine> {
+  return request<Machine>(`${API_URL}/machines/${id}`);
+}
+
+/**
+ * Delete a machine by ID.
+ * TODO: Backend endpoint not yet implemented - placeholder for future use.
+ */
+export async function deleteMachine(id: number): Promise<void> {
+  return requestVoid(`${API_URL}/machines/${id}`, {
+    method: 'DELETE',
+  });
+}
+
+/**
+ * Update machine name/hostname.
+ * TODO: Backend endpoint not yet implemented - placeholder for future use.
+ */
+export async function updateMachine(id: number, data: { name?: string; hostname?: string }): Promise<Machine> {
+  return request<Machine>(`${API_URL}/machines/${id}`, {
+    method: 'PUT',
+    body: JSON.stringify(data),
+  });
+}
+

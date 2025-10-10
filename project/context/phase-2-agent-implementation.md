@@ -1,12 +1,14 @@
 # Phase 2 Agent Implementation - Summary
 
 **Date**: October 10, 2025  
-**Status**: ✅ COMPLETE  
+**Status**: ✅ COMPLETE (Phase 3 Frontend also complete)  
 **Branch**: main
 
 ## Overview
 
 Successfully implemented Phase 2 backend agent milestones for multi-machine monitoring, including machine registration, API-key authentication middleware, metrics ingestion, and offline status detection.
+
+**Update**: Phase 3 (Frontend) is now also complete. See `phase-3-frontend-implementation.md` for details on the `/machines` UI, registration flow, and machine management features.
 
 ## Changes Summary
 

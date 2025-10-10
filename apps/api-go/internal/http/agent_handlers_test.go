@@ -362,3 +362,110 @@ func TestAPIKeyMiddleware(t *testing.T) {
 		}
 	})
 }
+
+func TestListMachines(t *testing.T) {
+	store := createTestStoreForAgentTests(t)
+	authService := createTestAuthServiceForAgent(t, store)
+	machineService := machines.NewService(store)
+
+	// Create test user with session
+	userID, sessionToken := createTestUserWithSession(t, authService)
+
+	// Create another user to test isolation
+	ctx := context.Background()
+	otherUser, _, err := authService.CreateUser(ctx, "other@example.com", "password123")
+	if err != nil {
+		t.Fatalf("Failed to create other user: %v", err)
+	}
+
+	// Register machines for first user
+	machine1, _, err := machineService.RegisterMachine(ctx, userID, "machine-1", "host-1.example.com")
+	if err != nil {
+		t.Fatalf("Failed to register machine 1: %v", err)
+	}
+
+	machine2, _, err := machineService.RegisterMachine(ctx, userID, "machine-2", "host-2.example.com")
+	if err != nil {
+		t.Fatalf("Failed to register machine 2: %v", err)
+	}
+
+	// Register machine for other user (should not appear in response)
+	_, _, err = machineService.RegisterMachine(ctx, otherUser.ID, "other-machine", "other.example.com")
+	if err != nil {
+		t.Fatalf("Failed to register other machine: %v", err)
+	}
+
+	t.Run("successful list", func(t *testing.T) {
+		req := httptest.NewRequest(http.MethodGet, "/machines", nil)
+		req.AddCookie(&http.Cookie{
+			Name:  auth.CookieName,
+			Value: sessionToken,
+		})
+
+		w := httptest.NewRecorder()
+		handler := authService.RequireAuth(handleListMachines(machineService))
+		handler.ServeHTTP(w, req)
+
+		if w.Code != http.StatusOK {
+			t.Errorf("Expected status 200, got %d", w.Code)
+		}
+
+		var machinesList []storage.Machine
+		if err := json.Unmarshal(w.Body.Bytes(), &machinesList); err != nil {
+			t.Fatalf("Failed to parse response: %v", err)
+		}
+
+		// Should return 2 machines for the authenticated user
+		if len(machinesList) != 2 {
+			t.Errorf("Expected 2 machines, got %d", len(machinesList))
+		}
+
+		// Verify machines belong to the user
+		foundMachine1 := false
+		foundMachine2 := false
+		for _, m := range machinesList {
+			if m.UserID != userID {
+				t.Errorf("Machine %d belongs to user %d, expected %d", m.ID, m.UserID, userID)
+			}
+			if m.ID == machine1.ID {
+				foundMachine1 = true
+			}
+			if m.ID == machine2.ID {
+				foundMachine2 = true
+			}
+		}
+
+		if !foundMachine1 || !foundMachine2 {
+			t.Error("Expected to find both registered machines")
+		}
+	})
+
+	t.Run("unauthenticated", func(t *testing.T) {
+		req := httptest.NewRequest(http.MethodGet, "/machines", nil)
+		// No session cookie
+
+		w := httptest.NewRecorder()
+		handler := authService.RequireAuth(handleListMachines(machineService))
+		handler.ServeHTTP(w, req)
+
+		if w.Code != http.StatusUnauthorized {
+			t.Errorf("Expected status 401, got %d", w.Code)
+		}
+	})
+
+	t.Run("method not allowed", func(t *testing.T) {
+		req := httptest.NewRequest(http.MethodPost, "/machines", nil)
+		req.AddCookie(&http.Cookie{
+			Name:  auth.CookieName,
+			Value: sessionToken,
+		})
+
+		w := httptest.NewRecorder()
+		handler := authService.RequireAuth(handleListMachines(machineService))
+		handler.ServeHTTP(w, req)
+
+		if w.Code != http.StatusMethodNotAllowed {
+			t.Errorf("Expected status 405, got %d", w.Code)
+		}
+	})
+}

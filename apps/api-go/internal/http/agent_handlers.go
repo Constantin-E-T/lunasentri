@@ -170,3 +170,31 @@ func getRemoteIP(r *http.Request) string {
 	}
 	return r.RemoteAddr
 }
+
+// handleListMachines handles GET /machines (requires session auth)
+func handleListMachines(machineService *machines.Service) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodGet {
+			http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
+
+		// Get authenticated user from context (set by RequireAuth middleware)
+		user, ok := auth.GetUserFromContext(r.Context())
+		if !ok {
+			http.Error(w, "Unauthorized", http.StatusUnauthorized)
+			return
+		}
+
+		// List machines with computed statuses
+		machinesList, err := machineService.ListMachinesWithComputedStatus(r.Context(), user.ID)
+		if err != nil {
+			log.Printf("Failed to list machines for user %d: %v", user.ID, err)
+			http.Error(w, "Failed to list machines", http.StatusInternalServerError)
+			return
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(machinesList)
+	}
+}

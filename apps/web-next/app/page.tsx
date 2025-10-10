@@ -72,6 +72,12 @@ export default function Home() {
                 </div>
               </Link>
             )}
+            <Link
+              href="/machines"
+              className="rounded-full bg-card/40 border border-border/30 px-4 py-2 text-muted-foreground transition-all duration-200 hover:text-foreground hover:border-border"
+            >
+              Machines
+            </Link>
             {user?.is_admin && (
               <>
                 <Link
