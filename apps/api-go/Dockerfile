@@ -23,9 +23,9 @@ WORKDIR /app
 
 # Create non-root user and data directory
 RUN addgroup -g 1000 appuser && \
-    adduser -D -u 1000 -G appuser appuser && \
-    mkdir -p /app/data && \
-    chown -R appuser:appuser /app
+  adduser -D -u 1000 -G appuser appuser && \
+  mkdir -p /app/data && \
+  chown -R appuser:appuser /app
 
 # Copy the binary from builder stage
 COPY --from=builder /app/lunasentri-api .
