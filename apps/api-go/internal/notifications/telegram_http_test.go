@@ -283,6 +283,24 @@ func (m *mockTelegramStore) GetLatestMetrics(ctx context.Context, machineID int)
 func (m *mockTelegramStore) GetMetricsHistory(ctx context.Context, machineID int, from, to time.Time, limit int) ([]storage.MetricsHistory, error) {
 	return nil, fmt.Errorf("not implemented")
 }
+
+// Heartbeat monitoring methods (stub implementations for testing)
+func (m *mockTelegramStore) ListAllMachines(ctx context.Context) ([]storage.Machine, error) {
+	return []storage.Machine{}, nil
+}
+
+func (m *mockTelegramStore) RecordMachineOfflineNotification(ctx context.Context, machineID int, notifiedAt time.Time) error {
+	return nil
+}
+
+func (m *mockTelegramStore) GetMachineLastOfflineNotification(ctx context.Context, machineID int) (time.Time, error) {
+	return time.Time{}, nil
+}
+
+func (m *mockTelegramStore) ClearMachineOfflineNotification(ctx context.Context, machineID int) error {
+	return nil
+}
+
 func (m *mockTelegramStore) Close() error {
 	return nil
 }

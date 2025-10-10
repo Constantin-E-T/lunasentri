@@ -109,10 +109,16 @@ type Store interface {
 	GetMachineByID(ctx context.Context, id int) (*Machine, error)
 	GetMachineByAPIKey(ctx context.Context, apiKeyHash string) (*Machine, error)
 	ListMachines(ctx context.Context, userID int) ([]Machine, error)
+	ListAllMachines(ctx context.Context) ([]Machine, error)
 	UpdateMachineStatus(ctx context.Context, id int, status string, lastSeen time.Time) error
 	UpdateMachineSystemInfo(ctx context.Context, id int, info MachineSystemInfoUpdate) error
 	UpdateMachineDetails(ctx context.Context, id int, updates map[string]interface{}) error
 	DeleteMachine(ctx context.Context, id int, userID int) error
+
+	// Machine heartbeat notification tracking
+	RecordMachineOfflineNotification(ctx context.Context, machineID int, notifiedAt time.Time) error
+	GetMachineLastOfflineNotification(ctx context.Context, machineID int) (time.Time, error)
+	ClearMachineOfflineNotification(ctx context.Context, machineID int) error
 
 	// Metrics history methods
 	InsertMetrics(ctx context.Context, machineID int, cpuPct, memUsedPct, diskUsedPct float64, netRxBytes, netTxBytes int64, uptimeSeconds *float64, timestamp time.Time) error

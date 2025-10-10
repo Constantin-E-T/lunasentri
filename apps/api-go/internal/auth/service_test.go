@@ -339,6 +339,23 @@ func (m *mockStore) GetMetricsHistory(ctx context.Context, machineID int, from, 
 	return []storage.MetricsHistory{}, nil
 }
 
+// Heartbeat monitoring methods (stub implementations for testing)
+func (m *mockStore) ListAllMachines(ctx context.Context) ([]storage.Machine, error) {
+	return []storage.Machine{}, nil
+}
+
+func (m *mockStore) RecordMachineOfflineNotification(ctx context.Context, machineID int, notifiedAt time.Time) error {
+	return nil
+}
+
+func (m *mockStore) GetMachineLastOfflineNotification(ctx context.Context, machineID int) (time.Time, error) {
+	return time.Time{}, nil
+}
+
+func (m *mockStore) ClearMachineOfflineNotification(ctx context.Context, machineID int) error {
+	return nil
+}
+
 func (m *mockStore) Close() error {
 	return nil
 }

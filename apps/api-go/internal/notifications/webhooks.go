@@ -37,6 +37,22 @@ type WebhookPayload struct {
 	EventID      int     `json:"event_id"`
 }
 
+// WebhookMachineEvent represents a machine status event payload for webhooks
+type WebhookMachineEvent struct {
+	Event   string         `json:"event"` // "machine.offline" or "machine.online"
+	Machine WebhookMachine `json:"machine"`
+}
+
+// WebhookMachine represents machine data in webhook payloads
+type WebhookMachine struct {
+	ID          int       `json:"id"`
+	Name        string    `json:"name"`
+	Hostname    string    `json:"hostname"`
+	Description string    `json:"description"`
+	Status      string    `json:"status"`
+	LastSeen    time.Time `json:"last_seen"`
+}
+
 // Notifier handles webhook notifications for alert events
 type Notifier struct {
 	store  storage.Store
@@ -97,6 +113,62 @@ func (n *Notifier) Send(ctx context.Context, rule storage.AlertRule, event stora
 		}(webhook)
 	}
 
+	return nil
+}
+
+// SendMachineEvent sends a machine status event to a webhook
+func (n *Notifier) SendMachineEvent(ctx context.Context, webhook storage.Webhook, event WebhookMachineEvent) error {
+	// Check delivery preconditions
+	if err := n.checkDeliveryPreconditions(webhook); err != nil {
+		return err
+	}
+
+	// Mark attempt
+	now := time.Now()
+	if err := n.store.UpdateWebhookDeliveryState(ctx, webhook.ID, now, nil); err != nil {
+		n.logger.Printf("Failed to update webhook delivery state: %v", err)
+	}
+
+	// Marshal payload
+	payload, err := json.Marshal(event)
+	if err != nil {
+		return fmt.Errorf("failed to marshal payload: %w", err)
+	}
+
+	// Create signature
+	signature, err := n.createSignature(payload, webhook.SecretHash)
+	if err != nil {
+		return fmt.Errorf("failed to create signature: %w", err)
+	}
+
+	// Send HTTP request
+	statusCode, err := n.makeHTTPRequest(ctx, webhook.URL, payload, signature)
+	if err != nil {
+		// Record failure
+		if updateErr := n.store.IncrementWebhookFailure(ctx, webhook.ID, now); updateErr != nil {
+			n.logger.Printf("Failed to record webhook failure: %v", updateErr)
+		}
+
+		// Check if we should enter cooldown
+		webhook.FailureCount++ // Simulate increment for cooldown check
+		webhook.LastErrorAt = &now
+		if n.shouldEnterCooldown(webhook) {
+			cooldownUntil := now.Add(CooldownDuration)
+			if updateErr := n.store.UpdateWebhookDeliveryState(ctx, webhook.ID, now, &cooldownUntil); updateErr != nil {
+				n.logger.Printf("Failed to set webhook cooldown: %v", updateErr)
+			}
+			n.logger.Printf("Webhook %d entered cooldown until %s", webhook.ID, cooldownUntil.Format(time.RFC3339))
+		}
+
+		return fmt.Errorf("webhook delivery failed (status=%d): %w", statusCode, err)
+	}
+
+	// Record success
+	if err := n.store.MarkWebhookSuccess(ctx, webhook.ID, now); err != nil {
+		n.logger.Printf("Failed to record webhook success: %v", err)
+	}
+
+	n.logger.Printf("Successfully delivered machine event to webhook %d (event=%s, machine=%d)", webhook.ID, event.Event, event.Machine.ID)
 	return nil
 }
 

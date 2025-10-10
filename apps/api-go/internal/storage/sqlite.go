@@ -251,6 +251,17 @@ func (s *SQLiteStore) migrate() error {
             ALTER TABLE machines ADD COLUMN description TEXT;
             `,
 		},
+		{
+			version: "014_machine_offline_notifications",
+			sql: `
+            CREATE TABLE IF NOT EXISTS machine_offline_notifications (
+                machine_id INTEGER PRIMARY KEY,
+                notified_at TIMESTAMP NOT NULL,
+                FOREIGN KEY (machine_id) REFERENCES machines(id) ON DELETE CASCADE
+            );
+            CREATE INDEX IF NOT EXISTS idx_machine_offline_notifications_notified_at ON machine_offline_notifications(notified_at);
+            `,
+		},
 	}
 
 	// Apply each migration if not already applied

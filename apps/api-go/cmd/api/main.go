@@ -141,6 +141,44 @@ func main() {
 	// Initialize machine service for agent management
 	machineService := machines.NewService(store)
 
+	// Parse heartbeat configuration from environment
+	heartbeatCheckInterval := 30 * time.Second
+	if intervalStr := os.Getenv("MACHINE_HEARTBEAT_CHECK_INTERVAL"); intervalStr != "" {
+		if parsedInterval, err := time.ParseDuration(intervalStr); err == nil {
+			heartbeatCheckInterval = parsedInterval
+		} else {
+			log.Printf("Warning: Invalid MACHINE_HEARTBEAT_CHECK_INTERVAL value '%s', using default 30s", intervalStr)
+		}
+	}
+
+	machineOfflineThreshold := 2 * time.Minute
+	if thresholdStr := os.Getenv("MACHINE_OFFLINE_THRESHOLD"); thresholdStr != "" {
+		if parsedThreshold, err := time.ParseDuration(thresholdStr); err == nil {
+			machineOfflineThreshold = parsedThreshold
+		} else {
+			log.Printf("Warning: Invalid MACHINE_OFFLINE_THRESHOLD value '%s', using default 2m", thresholdStr)
+		}
+	}
+
+	log.Printf("Heartbeat monitor configured (check interval: %v, offline threshold: %v)", heartbeatCheckInterval, machineOfflineThreshold)
+
+	// Initialize machine heartbeat notifier
+	machineHeartbeatNotifier := notifications.NewMachineHeartbeatNotifier(store, webhookNotifier, telegramNotifier, log.Default())
+
+	// Initialize and start heartbeat monitor
+	heartbeatMonitor := machines.NewHeartbeatMonitor(
+		store,
+		machineHeartbeatNotifier,
+		log.Default(),
+		machines.HeartbeatConfig{
+			CheckInterval:    heartbeatCheckInterval,
+			OfflineThreshold: machineOfflineThreshold,
+		},
+	)
+
+	// Start heartbeat monitor in background
+	heartbeatMonitor.Start(ctx)
+
 	// Create HTTP router with all dependencies
 	routerCfg := &router.RouterConfig{
 		Collector:        metricsCollector,
@@ -188,12 +226,15 @@ func main() {
 
 	log.Println("LunaSentri API shutting down...")
 
+	// Stop heartbeat monitor
+	heartbeatMonitor.Stop()
+
 	// Create context with timeout for graceful shutdown
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
 	// Attempt graceful shutdown
-	if err := server.Shutdown(ctx); err != nil {
+	if err := server.Shutdown(shutdownCtx); err != nil {
 		log.Printf("Server forced to shutdown: %v", err)
 	} else {
 		log.Println("LunaSentri API stopped gracefully")

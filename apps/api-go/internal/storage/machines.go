@@ -529,3 +529,111 @@ func (s *SQLiteStore) GetMetricsHistory(ctx context.Context, machineID int, from
 
 	return metrics, nil
 }
+
+// ListAllMachines retrieves all machines across all users
+func (s *SQLiteStore) ListAllMachines(ctx context.Context) ([]Machine, error) {
+	query := `
+		SELECT id, user_id, name, hostname, description, api_key, status, last_seen,
+		       platform, platform_version, kernel_version, cpu_cores, memory_total_mb, disk_total_gb, last_boot_time, created_at
+		FROM machines
+		ORDER BY id
+	`
+
+	rows, err := s.db.QueryContext(ctx, query)
+	if err != nil {
+		return nil, fmt.Errorf("failed to query machines: %w", err)
+	}
+	defer rows.Close()
+
+	var machines []Machine
+	for rows.Next() {
+		var m Machine
+		var desc sql.NullString
+		var lastSeen sql.NullTime
+		var platform sql.NullString
+		var platformVersion sql.NullString
+		var kernelVersion sql.NullString
+		var cpuCores sql.NullInt64
+		var memoryTotal sql.NullInt64
+		var diskTotal sql.NullInt64
+		var lastBoot sql.NullTime
+
+		if err := rows.Scan(
+			&m.ID, &m.UserID, &m.Name, &m.Hostname, &desc, &m.APIKey, &m.Status, &lastSeen,
+			&platform, &platformVersion, &kernelVersion, &cpuCores, &memoryTotal, &diskTotal, &lastBoot, &m.CreatedAt,
+		); err != nil {
+			return nil, fmt.Errorf("failed to scan machine: %w", err)
+		}
+
+		if desc.Valid {
+			m.Description = desc.String
+		}
+		if lastSeen.Valid {
+			m.LastSeen = lastSeen.Time
+		}
+		if platform.Valid {
+			m.Platform = platform.String
+		}
+		if platformVersion.Valid {
+			m.PlatformVersion = platformVersion.String
+		}
+		if kernelVersion.Valid {
+			m.KernelVersion = kernelVersion.String
+		}
+		if cpuCores.Valid {
+			m.CPUCores = int(cpuCores.Int64)
+		}
+		if memoryTotal.Valid {
+			m.MemoryTotalMB = memoryTotal.Int64
+		}
+		if diskTotal.Valid {
+			m.DiskTotalGB = diskTotal.Int64
+		}
+		if lastBoot.Valid {
+			m.LastBootTime = lastBoot.Time
+		}
+
+		machines = append(machines, m)
+	}
+
+	return machines, nil
+}
+
+// RecordMachineOfflineNotification records when we sent an offline notification
+func (s *SQLiteStore) RecordMachineOfflineNotification(ctx context.Context, machineID int, notifiedAt time.Time) error {
+	query := `
+		INSERT INTO machine_offline_notifications (machine_id, notified_at)
+		VALUES (?, ?)
+		ON CONFLICT(machine_id) DO UPDATE SET notified_at = excluded.notified_at
+	`
+	_, err := s.db.ExecContext(ctx, query, machineID, notifiedAt)
+	if err != nil {
+		return fmt.Errorf("failed to record offline notification: %w", err)
+	}
+	return nil
+}
+
+// GetMachineLastOfflineNotification retrieves the last time we notified about this machine being offline
+func (s *SQLiteStore) GetMachineLastOfflineNotification(ctx context.Context, machineID int) (time.Time, error) {
+	query := `SELECT notified_at FROM machine_offline_notifications WHERE machine_id = ?`
+
+	var notifiedAt time.Time
+	err := s.db.QueryRowContext(ctx, query, machineID).Scan(&notifiedAt)
+	if err == sql.ErrNoRows {
+		return time.Time{}, nil
+	}
+	if err != nil {
+		return time.Time{}, fmt.Errorf("failed to get offline notification: %w", err)
+	}
+	return notifiedAt, nil
+}
+
+// ClearMachineOfflineNotification clears the offline notification record (when machine comes back online)
+func (s *SQLiteStore) ClearMachineOfflineNotification(ctx context.Context, machineID int) error {
+	query := `DELETE FROM machine_offline_notifications WHERE machine_id = ?`
+	_, err := s.db.ExecContext(ctx, query, machineID)
+	if err != nil {
+		return fmt.Errorf("failed to clear offline notification: %w", err)
+	}
+	return nil
+}
