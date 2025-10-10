@@ -10,6 +10,8 @@ LunaSentri is a lightweight, self-hosted monitoring dashboard that provides real
 
 ### Core Monitoring
 
+- **Multi-Machine Support**: Monitor multiple servers from a single dashboard (NEW!)
+- **Lightweight Agent**: Install on any Linux server to stream metrics
 - **Real-time Metrics**: CPU, Memory, Disk, and Network usage with WebSocket streaming
 - **System Information**: OS, kernel, architecture, and runtime details
 - **Live Dashboard**: Beautiful dark-themed interface with real-time charts
@@ -68,11 +70,22 @@ LunaSentri is a lightweight, self-hosted monitoring dashboard that provides real
 ```
 lunasentri/
 ├── apps/
+│   ├── agent/                     # Monitoring agent (NEW!)
+│   │   ├── main.go               # Agent entry point
+│   │   ├── internal/
+│   │   │   ├── config/           # Configuration loading
+│   │   │   ├── collector/        # Metrics collection
+│   │   │   └── transport/        # API communication
+│   │   ├── scripts/
+│   │   │   └── install.sh        # Linux installation script
+│   │   └── Dockerfile            # Docker image
+│   │
 │   ├── api-go/                    # Go backend
 │   │   ├── main.go               # Server entry point
 │   │   ├── internal/
 │   │   │   ├── auth/             # Authentication & authorization
 │   │   │   ├── alerts/           # Alert rule engine
+│   │   │   ├── machines/         # Machine registry & metrics
 │   │   │   ├── metrics/          # System metrics collection
 │   │   │   ├── notifications/    # Webhook & Telegram notifiers
 │   │   │   ├── storage/          # SQLite database layer
@@ -91,6 +104,8 @@ lunasentri/
 │       └── frontend/
 │
 ├── docs/                          # Documentation (see below)
+│   ├── agent/                     # Agent documentation
+│   │   └── INSTALLATION.md       # Installation guide
 ├── deploy.sh                      # Deployment script
 ├── CLAUDE.md                      # AI assistant context
 └── README.md                      # This file
@@ -198,6 +213,25 @@ See [docs/deployment/DEPLOYMENT.md](docs/deployment/DEPLOYMENT.md) for complete 
 - Environment variable management
 - Database persistence
 - HTTPS and custom domains
+
+### Installing the Monitoring Agent
+
+To monitor remote servers, install the LunaSentri agent:
+
+1. **Register a machine** in the web dashboard to get an API key
+2. **Install on your server**:
+
+   ```bash
+   curl -fsSL https://raw.githubusercontent.com/Constantin-E-T/lunasentri/main/apps/agent/scripts/install.sh | sudo bash
+   ```
+
+3. **Verify it's running**:
+
+   ```bash
+   sudo systemctl status lunasentri-agent
+   ```
+
+See [docs/agent/INSTALLATION.md](docs/agent/INSTALLATION.md) for detailed installation instructions, Docker usage, and configuration options.
 
 ## 📚 Documentation
 
