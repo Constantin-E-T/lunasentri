@@ -9,12 +9,14 @@ Successfully implemented automated machine heartbeat monitoring system that dete
 ### 1. Core Heartbeat Monitoring (`internal/machines/heartbeat.go`)
 
 **New Components:**
+
 - `HeartbeatStore` interface - Defines minimal storage operations needed for monitoring
 - `HeartbeatNotifier` interface - Defines notification methods for offline/online events
 - `HeartbeatMonitor` struct - Main monitoring service with background goroutine
 - `HeartbeatConfig` struct - Configuration for check interval and offline threshold
 
 **Key Features:**
+
 - Background goroutine that runs on configurable interval (default: 30s)
 - Detects status transitions (online→offline, offline→online)
 - Prevents duplicate notifications using database tracking
@@ -22,6 +24,7 @@ Successfully implemented automated machine heartbeat monitoring system that dete
 - Comprehensive logging
 
 **Status Transition Logic:**
+
 - **Online → Offline**: Machine hasn't reported in > threshold time
   - Updates status to "offline"
   - Sends offline notification (if not already notified)
@@ -37,6 +40,7 @@ Successfully implemented automated machine heartbeat monitoring system that dete
 ### 2. Storage Layer Updates (`internal/storage/`)
 
 **New Methods Added to `Store` Interface:**
+
 ```go
 ListAllMachines(ctx context.Context) ([]Machine, error)
 RecordMachineOfflineNotification(ctx context.Context, machineID int, notifiedAt time.Time) error
@@ -45,6 +49,7 @@ ClearMachineOfflineNotification(ctx context.Context, machineID int) error
 ```
 
 **New Database Table:**
+
 ```sql
 CREATE TABLE machine_offline_notifications (
     machine_id INTEGER PRIMARY KEY,
@@ -54,21 +59,25 @@ CREATE TABLE machine_offline_notifications (
 ```
 
 **Migration Added:**
+
 - Version `014_machine_offline_notifications`
 - Auto-runs on server startup
 
 ### 3. Notification System (`internal/notifications/machine_heartbeat.go`)
 
 **New Component:**
+
 - `MachineHeartbeatNotifier` - Implements `HeartbeatNotifier` interface
 - Fans out to both Telegram and Webhook channels
 - Respects user's active notification preferences
 
 **Webhook Events:**
+
 - `machine.offline` - Sent when machine goes down
 - `machine.online` - Sent when machine recovers
 
 **Payload Structure:**
+
 ```json
 {
   "event": "machine.offline",
@@ -84,6 +93,7 @@ CREATE TABLE machine_offline_notifications (
 ```
 
 **Telegram Messages:**
+
 - 🔴 Offline alert with machine details
 - 🟢 Recovery alert when back online
 - Markdown formatting for readability
@@ -91,12 +101,14 @@ CREATE TABLE machine_offline_notifications (
 ### 4. Integration (`cmd/api/main.go`)
 
 **Configuration via Environment Variables:**
+
 ```bash
 MACHINE_HEARTBEAT_CHECK_INTERVAL=30s  # How often to check (default: 30s)
 MACHINE_OFFLINE_THRESHOLD=2m          # When to consider offline (default: 2m)
 ```
 
 **Startup Sequence:**
+
 1. Parse environment configuration
 2. Create heartbeat notifier
 3. Create heartbeat monitor
@@ -104,6 +116,7 @@ MACHINE_OFFLINE_THRESHOLD=2m          # When to consider offline (default: 2m)
 5. Register graceful shutdown
 
 **Shutdown Sequence:**
+
 1. Receive SIGTERM/SIGINT
 2. Stop heartbeat monitor
 3. Shutdown HTTP server
@@ -112,6 +125,7 @@ MACHINE_OFFLINE_THRESHOLD=2m          # When to consider offline (default: 2m)
 ### 5. Comprehensive Testing (`internal/machines/heartbeat_test.go`)
 
 **Test Coverage:**
+
 - ✅ Machine goes offline (online → offline transition)
 - ✅ Machine comes back online (offline → online transition)
 - ✅ No duplicate notifications (already offline)
@@ -120,6 +134,7 @@ MACHINE_OFFLINE_THRESHOLD=2m          # When to consider offline (default: 2m)
 - ✅ Multiple machines with different states
 
 **Test Results:**
+
 ```
 === RUN   TestHeartbeatMonitor_MachineGoesOffline
 --- PASS: TestHeartbeatMonitor_MachineGoesOffline (0.00s)
@@ -148,18 +163,21 @@ PASS
 ### Examples
 
 **Conservative (less frequent checks):**
+
 ```bash
 MACHINE_HEARTBEAT_CHECK_INTERVAL=1m
 MACHINE_OFFLINE_THRESHOLD=5m
 ```
 
 **Aggressive (faster detection):**
+
 ```bash
 MACHINE_HEARTBEAT_CHECK_INTERVAL=15s
 MACHINE_OFFLINE_THRESHOLD=1m
 ```
 
 **Production Recommended:**
+
 ```bash
 MACHINE_HEARTBEAT_CHECK_INTERVAL=30s
 MACHINE_OFFLINE_THRESHOLD=2m
@@ -243,32 +261,35 @@ Record Notification in DB
 The following test files need their mock stores updated to include the new storage methods:
 
 **Files to Update:**
+
 - `internal/auth/http_test.go` - Add 4 new methods to `mockStore`
 - `internal/auth/service_test.go` - Add 4 new methods to `mockStore`
 - `internal/notifications/http_test.go` - Add 4 new methods to `mockHTTPStore`
 
 **Methods to Add:**
+
 ```go
 func (m *mockStore) ListAllMachines(ctx context.Context) ([]storage.Machine, error) {
-	return nil, nil
+ return nil, nil
 }
 
 func (m *mockStore) RecordMachineOfflineNotification(ctx context.Context, machineID int, notifiedAt time.Time) error {
-	return nil
+ return nil
 }
 
 func (m *mockStore) GetMachineLastOfflineNotification(ctx context.Context, machineID int) (time.Time, error) {
-	return time.Time{}, nil
+ return time.Time{}, nil
 }
 
 func (m *mockStore) ClearMachineOfflineNotification(ctx context.Context, machineID int) error {
-	return nil
+ return nil
 }
 ```
 
 ### 2. Update Documentation
 
 **Files to Create/Update:**
+
 - ✅ This summary document
 - 🔄 `docs/agent/INSTALLATION.md` - Add heartbeat monitoring section
 - 🔄 `docs/features/notifications.md` - Document machine offline/online events
@@ -277,12 +298,14 @@ func (m *mockStore) ClearMachineOfflineNotification(ctx context.Context, machine
 ## Verification Commands
 
 ### Check Heartbeat is Running
+
 ```bash
 # Should see "Heartbeat monitor started" in logs
 docker logs <container> | grep "Heartbeat monitor"
 ```
 
 ### Test with Your Agent
+
 ```bash
 # Stop the test agent
 docker exec -it lunasentri-test-server pkill lunasentri-agent
@@ -297,6 +320,7 @@ docker exec -d lunasentri-test-server /usr/local/bin/lunasentri-agent --config /
 ```
 
 ### Monitor Database
+
 ```bash
 sqlite3 data/lunasentri.db "SELECT * FROM machine_offline_notifications;"
 ```

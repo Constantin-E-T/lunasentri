@@ -14,6 +14,7 @@
 The heartbeat monitoring system automatically detects when machines go offline and sends notifications to users via Telegram and Webhooks - without requiring users to be logged in.
 
 **Key Features:**
+
 - Background worker checks all machines every 30s (configurable)
 - Marks machines offline after 2m of no activity (configurable)
 - Sends notifications only once per offline event (deduplication)
@@ -38,16 +39,19 @@ MACHINE_OFFLINE_THRESHOLD=2m
 ```
 
 **Recommended Production Settings:**
+
 - **Check Interval:** `30s` - Good balance between responsiveness and resource usage
 - **Offline Threshold:** `2m` - Accounts for network hiccups while still being responsive
 
 **Conservative Settings** (fewer checks, less sensitive):
+
 ```bash
 MACHINE_HEARTBEAT_CHECK_INTERVAL=1m
 MACHINE_OFFLINE_THRESHOLD=5m
 ```
 
 **Aggressive Settings** (faster detection):
+
 ```bash
 MACHINE_HEARTBEAT_CHECK_INTERVAL=15s
 MACHINE_OFFLINE_THRESHOLD=1m
@@ -103,6 +107,7 @@ journalctl -u lunasentri-api -f | grep "Heartbeat monitor"
 ```
 
 You should see:
+
 ```
 Heartbeat monitor started (interval: 30s, threshold: 2m0s)
 ```
@@ -116,6 +121,7 @@ The database migration runs automatically on startup:
 **Migration:** `014_machine_offline_notifications`
 
 **Creates:**
+
 ```sql
 CREATE TABLE IF NOT EXISTS machine_offline_notifications (
     machine_id INTEGER PRIMARY KEY,
@@ -165,12 +171,15 @@ docker exec -it lunasentri-test-server pkill lunasentri-agent
 Check your notification channels:
 
 **Telegram:**
+
 - Look for 🔴 offline message with machine details
 
 **Webhook:**
+
 - Check webhook logs for `machine.offline` event
 
 **Database:**
+
 ```bash
 sqlite3 data/lunasentri.db "SELECT * FROM machine_offline_notifications;"
 ```
@@ -204,16 +213,19 @@ journalctl -u lunasentri-api | grep -i heartbeat
 ### Expected Log Output
 
 **Startup:**
+
 ```
 Heartbeat monitor started (interval: 30s, threshold: 2m0s)
 ```
 
 **Machine Goes Offline:**
+
 ```
 Machine 1 (production-server) went offline (last seen: 2m15s ago)
 ```
 
 **Machine Recovers:**
+
 ```
 Machine 1 (production-server) came back online
 ```
@@ -223,6 +235,7 @@ Machine 1 (production-server) came back online
 **Issue:** No offline notifications being sent
 
 **Solutions:**
+
 1. Check environment variables are set correctly
 2. Verify heartbeat monitor started (check logs)
 3. Check user has active notification channels (Telegram/Webhooks)
@@ -231,6 +244,7 @@ Machine 1 (production-server) came back online
 **Issue:** Duplicate notifications
 
 **Solutions:**
+
 1. This should not happen (prevented by design)
 2. If it does, check the `machine_offline_notifications` table
 3. Look for logs showing notification state changes
@@ -238,6 +252,7 @@ Machine 1 (production-server) came back online
 **Issue:** Notifications delayed
 
 **Solutions:**
+
 1. Check `MACHINE_HEARTBEAT_CHECK_INTERVAL` - monitor only checks at this interval
 2. Check `MACHINE_OFFLINE_THRESHOLD` - machine won't be marked offline until this time passes
 3. Verify backend is running and not crashed
@@ -263,6 +278,7 @@ When a machine goes offline or comes back online, webhooks receive:
 ```
 
 Includes standard webhook security headers:
+
 - `X-Webhook-Signature: sha256=...` (HMAC-SHA256)
 - `Content-Type: application/json`
 
@@ -271,12 +287,14 @@ Includes standard webhook security headers:
 ## Performance Impact
 
 **Resource Usage:**
+
 - CPU: <0.1% additional load
 - Memory: ~10MB for background goroutine
 - Database: 1 SELECT query every 30s
 - Network: Only when sending notifications
 
 **Database Growth:**
+
 - `machine_offline_notifications` table: Max 1 row per machine
 - Rows are deleted when machines come back online
 - Minimal disk space impact
@@ -286,6 +304,7 @@ Includes standard webhook security headers:
 ## Files Changed
 
 ### New Files (5)
+
 1. `internal/machines/heartbeat.go` - Core monitoring logic
 2. `internal/machines/heartbeat_test.go` - Comprehensive tests
 3. `internal/notifications/machine_heartbeat.go` - Notification delivery
@@ -293,6 +312,7 @@ Includes standard webhook security headers:
 5. `project/HEARTBEAT_DEPLOYMENT.md` - This file
 
 ### Modified Files (5)
+
 1. `internal/storage/interface.go` - Added 4 new Store methods
 2. `internal/storage/machines.go` - Implemented heartbeat storage methods
 3. `internal/storage/sqlite.go` - Added migration 014
@@ -300,6 +320,7 @@ Includes standard webhook security headers:
 5. `cmd/api/main.go` - Integrated heartbeat monitor
 
 ### Test Infrastructure (3)
+
 1. `internal/auth/service_test.go` - Updated mock store
 2. `internal/notifications/http_test.go` - Updated mock store  
 3. `internal/notifications/webhooks_test.go` - Updated mock store
@@ -322,6 +343,7 @@ Includes standard webhook security headers:
 If issues arise:
 
 1. **Quick Fix:** Increase `MACHINE_HEARTBEAT_CHECK_INTERVAL` to reduce load:
+
    ```bash
    MACHINE_HEARTBEAT_CHECK_INTERVAL=5m
    ```

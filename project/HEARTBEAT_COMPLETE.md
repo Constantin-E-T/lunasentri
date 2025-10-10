@@ -29,6 +29,7 @@ Successfully implemented automated heartbeat monitoring for LunaSentri. The syst
 ### Technical Implementation
 
 **5 New Files Created:**
+
 1. `internal/machines/heartbeat.go` (195 lines) - Core monitoring service
 2. `internal/machines/heartbeat_test.go` (337 lines) - Comprehensive test suite
 3. `internal/notifications/machine_heartbeat.go` (168 lines) - Notification delivery
@@ -36,6 +37,7 @@ Successfully implemented automated heartbeat monitoring for LunaSentri. The syst
 5. `project/HEARTBEAT_DEPLOYMENT.md` - Deployment guide
 
 **5 Files Modified:**
+
 1. `internal/storage/interface.go` - Added 4 new Store interface methods
 2. `internal/storage/machines.go` - Implemented heartbeat storage operations
 3. `internal/storage/sqlite.go` - Added migration 014 for tracking table
@@ -43,6 +45,7 @@ Successfully implemented automated heartbeat monitoring for LunaSentri. The syst
 5. `cmd/api/main.go` - Integrated heartbeat monitor with graceful shutdown
 
 **4 Test Files Updated:**
+
 1. `internal/auth/service_test.go` - Updated mock store interface
 2. `internal/notifications/http_test.go` - Updated mock store interface
 3. `internal/notifications/webhooks_test.go` - Updated mock store interface
@@ -136,6 +139,7 @@ CREATE TABLE machine_offline_notifications (
 ### State Transitions
 
 **Online → Offline:**
+
 1. Machine hasn't reported metrics in > 2 minutes
 2. Update status to "offline" in database
 3. Check if already notified (deduplication)
@@ -143,6 +147,7 @@ CREATE TABLE machine_offline_notifications (
 5. Record notification timestamp
 
 **Offline → Online:**
+
 1. Machine reports metrics after being offline
 2. Update status to "online" in database
 3. Send recovery webhook + Telegram notification
@@ -192,6 +197,7 @@ The machine is now back online and reporting metrics.
 ## Performance Metrics
 
 **Resource Impact:**
+
 - CPU: <0.1% additional load
 - Memory: ~10MB for background goroutine
 - Database: 1 query every 30 seconds
@@ -199,6 +205,7 @@ The machine is now back online and reporting metrics.
 - Network: Only when notifications sent
 
 **Scalability:**
+
 - 10 machines: Negligible impact
 - 100 machines: <1% CPU increase
 - 1,000 machines: May need to increase check interval
@@ -259,15 +266,18 @@ docker logs <api-container> | grep -i "came back online"
 ### Verify Notifications
 
 **Telegram:**
+
 - Check for 🔴 offline message
 - Check for 🟢 recovery message
 
 **Webhooks:**
+
 - Check webhook endpoint logs
 - Verify `machine.offline` event received
 - Verify `machine.online` event received
 
 **Database:**
+
 ```bash
 # Check notification tracking
 sqlite3 data/lunasentri.db \
@@ -324,12 +334,14 @@ Potential improvements for later:
 If issues occur:
 
 **Option 1 - Reduce Load:**
+
 ```bash
 # Increase check interval to reduce resource usage
 MACHINE_HEARTBEAT_CHECK_INTERVAL=5m
 ```
 
 **Option 2 - Full Rollback:**
+
 1. Deploy previous binary
 2. Database table is harmless (won't be used)
 3. No data loss (existing functionality unaffected)
