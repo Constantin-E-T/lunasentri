@@ -360,6 +360,50 @@ func (m *mockStore) ClearMachineOfflineNotification(ctx context.Context, machine
 	return nil
 }
 
+// Machine credential management methods (stub implementations for testing)
+func (m *mockStore) SetMachineEnabled(ctx context.Context, machineID int, enabled bool) error {
+	return nil
+}
+
+func (m *mockStore) CreateMachineAPIKey(ctx context.Context, machineID int, apiKeyHash string) (*storage.MachineAPIKey, error) {
+	return &storage.MachineAPIKey{
+		ID:         1,
+		MachineID:  machineID,
+		APIKeyHash: apiKeyHash,
+		CreatedAt:  time.Now(),
+	}, nil
+}
+
+func (m *mockStore) RevokeMachineAPIKey(ctx context.Context, keyID int) error {
+	return nil
+}
+
+func (m *mockStore) RevokeAllMachineAPIKeys(ctx context.Context, machineID int) error {
+	return nil
+}
+
+func (m *mockStore) GetActiveAPIKeyForMachine(ctx context.Context, machineID int) (*storage.MachineAPIKey, error) {
+	return &storage.MachineAPIKey{
+		ID:         1,
+		MachineID:  machineID,
+		APIKeyHash: "test_hash",
+		CreatedAt:  time.Now(),
+	}, nil
+}
+
+func (m *mockStore) GetMachineAPIKeyByHash(ctx context.Context, apiKeyHash string) (*storage.MachineAPIKey, error) {
+	return &storage.MachineAPIKey{
+		ID:         1,
+		MachineID:  1,
+		APIKeyHash: apiKeyHash,
+		CreatedAt:  time.Now(),
+	}, nil
+}
+
+func (m *mockStore) ListMachineAPIKeys(ctx context.Context, machineID int) ([]storage.MachineAPIKey, error) {
+	return []storage.MachineAPIKey{}, nil
+}
+
 func (m *mockStore) Close() error {
 	return nil
 }

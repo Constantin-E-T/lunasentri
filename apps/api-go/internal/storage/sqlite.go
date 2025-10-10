@@ -262,6 +262,35 @@ func (s *SQLiteStore) migrate() error {
             CREATE INDEX IF NOT EXISTS idx_machine_offline_notifications_notified_at ON machine_offline_notifications(notified_at);
             `,
 		},
+		{
+			version: "015_machine_credential_management",
+			sql: `
+            -- Add is_enabled flag to machines table
+            ALTER TABLE machines ADD COLUMN is_enabled BOOLEAN DEFAULT 1 NOT NULL;
+            
+            -- Create machine_api_keys table to track key versions
+            CREATE TABLE IF NOT EXISTS machine_api_keys (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                machine_id INTEGER NOT NULL,
+                api_key_hash TEXT NOT NULL,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                revoked_at TIMESTAMP,
+                FOREIGN KEY (machine_id) REFERENCES machines(id) ON DELETE CASCADE
+            );
+            
+            -- Create indexes for performance
+            CREATE INDEX IF NOT EXISTS idx_machine_api_keys_machine_id ON machine_api_keys(machine_id);
+            CREATE INDEX IF NOT EXISTS idx_machine_api_keys_hash ON machine_api_keys(api_key_hash);
+            CREATE INDEX IF NOT EXISTS idx_machine_api_keys_revoked ON machine_api_keys(revoked_at);
+            CREATE INDEX IF NOT EXISTS idx_machines_is_enabled ON machines(is_enabled);
+            
+            -- Migrate existing API keys from machines table to machine_api_keys table
+            INSERT INTO machine_api_keys (machine_id, api_key_hash, created_at, revoked_at)
+            SELECT id, api_key, created_at, NULL
+            FROM machines
+            WHERE api_key IS NOT NULL AND api_key != '';
+            `,
+		},
 	}
 
 	// Apply each migration if not already applied

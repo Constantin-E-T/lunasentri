@@ -15,8 +15,9 @@ type Machine struct {
 	Name            string    `json:"name"`
 	Hostname        string    `json:"hostname"`
 	Description     string    `json:"description"`
-	APIKey          string    `json:"api_key"` // Hashed API key
-	Status          string    `json:"status"`  // "online", "offline"
+	APIKey          string    `json:"api_key"` // Hashed API key (deprecated, use machine_api_keys table)
+	IsEnabled       bool      `json:"is_enabled"`
+	Status          string    `json:"status"` // "online", "offline"
 	LastSeen        time.Time `json:"last_seen"`
 	Platform        string    `json:"platform"`
 	PlatformVersion string    `json:"platform_version"`
@@ -26,6 +27,15 @@ type Machine struct {
 	DiskTotalGB     int64     `json:"disk_total_gb"`
 	LastBootTime    time.Time `json:"last_boot_time"`
 	CreatedAt       time.Time `json:"created_at"`
+}
+
+// MachineAPIKey represents an API key version for a machine
+type MachineAPIKey struct {
+	ID         int        `json:"id"`
+	MachineID  int        `json:"machine_id"`
+	APIKeyHash string     `json:"api_key_hash"`
+	CreatedAt  time.Time  `json:"created_at"`
+	RevokedAt  *time.Time `json:"revoked_at"`
 }
 
 // MetricsHistory represents historical metrics for a machine
@@ -53,12 +63,20 @@ type MachineSystemInfoUpdate struct {
 	LastBootTime    *time.Time
 }
 
-// CreateMachine creates a new machine entry
+// CreateMachine creates a new machine entry and stores the API key in machine_api_keys table
 func (s *SQLiteStore) CreateMachine(ctx context.Context, userID int, name, hostname, description, apiKeyHash string) (*Machine, error) {
+	// Start a transaction
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return nil, fmt.Errorf("failed to begin transaction: %w", err)
+	}
+	defer tx.Rollback()
+
+	// Insert machine (api_key column is kept for backward compatibility but not used)
 	query := `
-		INSERT INTO machines (user_id, name, hostname, description, api_key, status, created_at)
-		VALUES (?, ?, ?, ?, ?, 'offline', CURRENT_TIMESTAMP)
-		RETURNING id, user_id, name, hostname, description, api_key, status, last_seen, platform, platform_version, kernel_version, cpu_cores, memory_total_mb, disk_total_gb, last_boot_time, created_at
+		INSERT INTO machines (user_id, name, hostname, description, api_key, is_enabled, status, created_at)
+		VALUES (?, ?, ?, ?, ?, 1, 'offline', CURRENT_TIMESTAMP)
+		RETURNING id, user_id, name, hostname, description, api_key, is_enabled, status, last_seen, platform, platform_version, kernel_version, cpu_cores, memory_total_mb, disk_total_gb, last_boot_time, created_at
 	`
 
 	var m Machine
@@ -72,12 +90,23 @@ func (s *SQLiteStore) CreateMachine(ctx context.Context, userID int, name, hostn
 	var diskTotal sql.NullInt64
 	var lastBoot sql.NullTime
 
-	err := s.db.QueryRowContext(ctx, query, userID, name, hostname, description, apiKeyHash).Scan(
-		&m.ID, &m.UserID, &m.Name, &m.Hostname, &desc, &m.APIKey, &m.Status, &lastSeen,
+	err = tx.QueryRowContext(ctx, query, userID, name, hostname, description, apiKeyHash).Scan(
+		&m.ID, &m.UserID, &m.Name, &m.Hostname, &desc, &m.APIKey, &m.IsEnabled, &m.Status, &lastSeen,
 		&platform, &platformVersion, &kernelVersion, &cpuCores, &memoryTotal, &diskTotal, &lastBoot, &m.CreatedAt,
 	)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create machine: %w", err)
+	}
+
+	// Insert the API key into machine_api_keys table
+	keyQuery := `INSERT INTO machine_api_keys (machine_id, api_key_hash, created_at) VALUES (?, ?, CURRENT_TIMESTAMP)`
+	if _, err := tx.ExecContext(ctx, keyQuery, m.ID, apiKeyHash); err != nil {
+		return nil, fmt.Errorf("failed to create machine API key: %w", err)
+	}
+
+	// Commit transaction
+	if err := tx.Commit(); err != nil {
+		return nil, fmt.Errorf("failed to commit transaction: %w", err)
 	}
 
 	if desc.Valid {
@@ -114,7 +143,7 @@ func (s *SQLiteStore) CreateMachine(ctx context.Context, userID int, name, hostn
 // GetMachineByID retrieves a machine by ID
 func (s *SQLiteStore) GetMachineByID(ctx context.Context, id int) (*Machine, error) {
 	query := `
-		SELECT id, user_id, name, hostname, description, api_key, status, last_seen,
+		SELECT id, user_id, name, hostname, description, api_key, is_enabled, status, last_seen,
 		       platform, platform_version, kernel_version, cpu_cores,
 		       memory_total_mb, disk_total_gb, last_boot_time, created_at
 		FROM machines
@@ -133,7 +162,7 @@ func (s *SQLiteStore) GetMachineByID(ctx context.Context, id int) (*Machine, err
 	var lastBoot sql.NullTime
 
 	err := s.db.QueryRowContext(ctx, query, id).Scan(
-		&m.ID, &m.UserID, &m.Name, &m.Hostname, &description, &m.APIKey, &m.Status, &lastSeen,
+		&m.ID, &m.UserID, &m.Name, &m.Hostname, &description, &m.APIKey, &m.IsEnabled, &m.Status, &lastSeen,
 		&platform, &platformVersion, &kernelVersion, &cpuCores, &memoryTotal, &diskTotal, &lastBoot, &m.CreatedAt,
 	)
 	if err == sql.ErrNoRows {
@@ -174,14 +203,15 @@ func (s *SQLiteStore) GetMachineByID(ctx context.Context, id int) (*Machine, err
 	return &m, nil
 }
 
-// GetMachineByAPIKey retrieves a machine by API key hash
+// GetMachineByAPIKey retrieves a machine by API key hash using the machine_api_keys table
 func (s *SQLiteStore) GetMachineByAPIKey(ctx context.Context, apiKeyHash string) (*Machine, error) {
 	query := `
-		SELECT id, user_id, name, hostname, description, api_key, status, last_seen,
-		       platform, platform_version, kernel_version, cpu_cores,
-		       memory_total_mb, disk_total_gb, last_boot_time, created_at
-		FROM machines
-		WHERE api_key = ?
+		SELECT m.id, m.user_id, m.name, m.hostname, m.description, m.api_key, m.is_enabled, m.status, m.last_seen,
+		       m.platform, m.platform_version, m.kernel_version, m.cpu_cores,
+		       m.memory_total_mb, m.disk_total_gb, m.last_boot_time, m.created_at
+		FROM machines m
+		INNER JOIN machine_api_keys k ON m.id = k.machine_id
+		WHERE k.api_key_hash = ? AND k.revoked_at IS NULL
 	`
 
 	var m Machine
@@ -196,7 +226,7 @@ func (s *SQLiteStore) GetMachineByAPIKey(ctx context.Context, apiKeyHash string)
 	var lastBoot sql.NullTime
 
 	err := s.db.QueryRowContext(ctx, query, apiKeyHash).Scan(
-		&m.ID, &m.UserID, &m.Name, &m.Hostname, &description, &m.APIKey, &m.Status, &lastSeen,
+		&m.ID, &m.UserID, &m.Name, &m.Hostname, &description, &m.APIKey, &m.IsEnabled, &m.Status, &lastSeen,
 		&platform, &platformVersion, &kernelVersion, &cpuCores, &memoryTotal, &diskTotal, &lastBoot, &m.CreatedAt,
 	)
 	if err == sql.ErrNoRows {
@@ -240,7 +270,7 @@ func (s *SQLiteStore) GetMachineByAPIKey(ctx context.Context, apiKeyHash string)
 // ListMachines retrieves all machines for a user
 func (s *SQLiteStore) ListMachines(ctx context.Context, userID int) ([]Machine, error) {
 	query := `
-		SELECT id, user_id, name, hostname, description, api_key, status, last_seen,
+		SELECT id, user_id, name, hostname, description, api_key, is_enabled, status, last_seen,
 		       platform, platform_version, kernel_version, cpu_cores,
 		       memory_total_mb, disk_total_gb, last_boot_time, created_at
 		FROM machines
@@ -267,7 +297,7 @@ func (s *SQLiteStore) ListMachines(ctx context.Context, userID int) ([]Machine, 
 		var diskTotal sql.NullInt64
 		var lastBoot sql.NullTime
 		if err := rows.Scan(
-			&m.ID, &m.UserID, &m.Name, &m.Hostname, &description, &m.APIKey, &m.Status, &lastSeen,
+			&m.ID, &m.UserID, &m.Name, &m.Hostname, &description, &m.APIKey, &m.IsEnabled, &m.Status, &lastSeen,
 			&platform, &platformVersion, &kernelVersion, &cpuCores, &memoryTotal, &diskTotal, &lastBoot, &m.CreatedAt,
 		); err != nil {
 			return nil, fmt.Errorf("failed to scan machine: %w", err)
@@ -661,4 +691,151 @@ func (s *SQLiteStore) ClearMachineOfflineNotification(ctx context.Context, machi
 		return fmt.Errorf("failed to clear offline notification: %w", err)
 	}
 	return nil
+}
+
+// SetMachineEnabled enables or disables a machine
+func (s *SQLiteStore) SetMachineEnabled(ctx context.Context, machineID int, enabled bool) error {
+	query := `UPDATE machines SET is_enabled = ? WHERE id = ?`
+	_, err := s.db.ExecContext(ctx, query, enabled, machineID)
+	if err != nil {
+		return fmt.Errorf("failed to update machine enabled status: %w", err)
+	}
+	return nil
+}
+
+// CreateMachineAPIKey creates a new API key entry for a machine
+func (s *SQLiteStore) CreateMachineAPIKey(ctx context.Context, machineID int, apiKeyHash string) (*MachineAPIKey, error) {
+	query := `
+		INSERT INTO machine_api_keys (machine_id, api_key_hash, created_at)
+		VALUES (?, ?, CURRENT_TIMESTAMP)
+		RETURNING id, machine_id, api_key_hash, created_at, revoked_at
+	`
+
+	var key MachineAPIKey
+	var revokedAt sql.NullTime
+
+	err := s.db.QueryRowContext(ctx, query, machineID, apiKeyHash).Scan(
+		&key.ID, &key.MachineID, &key.APIKeyHash, &key.CreatedAt, &revokedAt,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create machine API key: %w", err)
+	}
+
+	if revokedAt.Valid {
+		key.RevokedAt = &revokedAt.Time
+	}
+
+	return &key, nil
+}
+
+// RevokeMachineAPIKey marks an API key as revoked
+func (s *SQLiteStore) RevokeMachineAPIKey(ctx context.Context, keyID int) error {
+	query := `UPDATE machine_api_keys SET revoked_at = CURRENT_TIMESTAMP WHERE id = ?`
+	_, err := s.db.ExecContext(ctx, query, keyID)
+	if err != nil {
+		return fmt.Errorf("failed to revoke machine API key: %w", err)
+	}
+	return nil
+}
+
+// RevokeAllMachineAPIKeys revokes all API keys for a machine
+func (s *SQLiteStore) RevokeAllMachineAPIKeys(ctx context.Context, machineID int) error {
+	query := `UPDATE machine_api_keys SET revoked_at = CURRENT_TIMESTAMP WHERE machine_id = ? AND revoked_at IS NULL`
+	_, err := s.db.ExecContext(ctx, query, machineID)
+	if err != nil {
+		return fmt.Errorf("failed to revoke all machine API keys: %w", err)
+	}
+	return nil
+}
+
+// GetActiveAPIKeyForMachine retrieves the active (non-revoked) API key for a machine
+func (s *SQLiteStore) GetActiveAPIKeyForMachine(ctx context.Context, machineID int) (*MachineAPIKey, error) {
+	query := `
+		SELECT id, machine_id, api_key_hash, created_at, revoked_at
+		FROM machine_api_keys
+		WHERE machine_id = ? AND revoked_at IS NULL
+		ORDER BY created_at DESC
+		LIMIT 1
+	`
+
+	var key MachineAPIKey
+	var revokedAt sql.NullTime
+
+	err := s.db.QueryRowContext(ctx, query, machineID).Scan(
+		&key.ID, &key.MachineID, &key.APIKeyHash, &key.CreatedAt, &revokedAt,
+	)
+	if err == sql.ErrNoRows {
+		return nil, fmt.Errorf("no active API key found for machine")
+	}
+	if err != nil {
+		return nil, fmt.Errorf("failed to get active API key: %w", err)
+	}
+
+	if revokedAt.Valid {
+		key.RevokedAt = &revokedAt.Time
+	}
+
+	return &key, nil
+}
+
+// GetMachineAPIKeyByHash retrieves a machine API key by its hash
+func (s *SQLiteStore) GetMachineAPIKeyByHash(ctx context.Context, apiKeyHash string) (*MachineAPIKey, error) {
+	query := `
+		SELECT id, machine_id, api_key_hash, created_at, revoked_at
+		FROM machine_api_keys
+		WHERE api_key_hash = ?
+	`
+
+	var key MachineAPIKey
+	var revokedAt sql.NullTime
+
+	err := s.db.QueryRowContext(ctx, query, apiKeyHash).Scan(
+		&key.ID, &key.MachineID, &key.APIKeyHash, &key.CreatedAt, &revokedAt,
+	)
+	if err == sql.ErrNoRows {
+		return nil, fmt.Errorf("API key not found")
+	}
+	if err != nil {
+		return nil, fmt.Errorf("failed to get API key: %w", err)
+	}
+
+	if revokedAt.Valid {
+		key.RevokedAt = &revokedAt.Time
+	}
+
+	return &key, nil
+}
+
+// ListMachineAPIKeys retrieves all API keys (active and revoked) for a machine
+func (s *SQLiteStore) ListMachineAPIKeys(ctx context.Context, machineID int) ([]MachineAPIKey, error) {
+	query := `
+		SELECT id, machine_id, api_key_hash, created_at, revoked_at
+		FROM machine_api_keys
+		WHERE machine_id = ?
+		ORDER BY created_at DESC
+	`
+
+	rows, err := s.db.QueryContext(ctx, query, machineID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to list machine API keys: %w", err)
+	}
+	defer rows.Close()
+
+	var keys []MachineAPIKey
+	for rows.Next() {
+		var key MachineAPIKey
+		var revokedAt sql.NullTime
+
+		if err := rows.Scan(&key.ID, &key.MachineID, &key.APIKeyHash, &key.CreatedAt, &revokedAt); err != nil {
+			return nil, fmt.Errorf("failed to scan machine API key: %w", err)
+		}
+
+		if revokedAt.Valid {
+			key.RevokedAt = &revokedAt.Time
+		}
+
+		keys = append(keys, key)
+	}
+
+	return keys, nil
 }

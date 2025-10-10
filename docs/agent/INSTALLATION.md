@@ -405,6 +405,15 @@ Group=lunasentri
 - The systemd service has security hardening enabled (see service file)
 - No privileged operations are performed during metrics collection
 
+### API Key Management
+
+- **Initial Setup**: API keys are generated once during machine registration
+- **Rotation**: Keys can be rotated if compromised (see [Machine Credential Lifecycle](../features/MACHINE_CREDENTIAL_LIFECYCLE.md))
+- **Revocation**: Machines can be temporarily disabled without deletion
+- **Storage**: Never commit API keys to version control
+
+For detailed information on managing machine credentials (disable/enable, key rotation), see the [Machine Credential Lifecycle](../features/MACHINE_CREDENTIAL_LIFECYCLE.md) documentation.
+
 ## Support
 
 For issues or questions:

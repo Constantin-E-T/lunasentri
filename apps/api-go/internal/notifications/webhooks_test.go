@@ -239,6 +239,35 @@ func (m *mockStore) ClearMachineOfflineNotification(ctx context.Context, machine
 	return nil
 }
 
+// Machine credential management methods (not implemented for these tests)
+func (m *mockStore) SetMachineEnabled(ctx context.Context, machineID int, enabled bool) error {
+	return fmt.Errorf("not implemented")
+}
+
+func (m *mockStore) CreateMachineAPIKey(ctx context.Context, machineID int, apiKeyHash string) (*storage.MachineAPIKey, error) {
+	return nil, fmt.Errorf("not implemented")
+}
+
+func (m *mockStore) RevokeMachineAPIKey(ctx context.Context, keyID int) error {
+	return fmt.Errorf("not implemented")
+}
+
+func (m *mockStore) RevokeAllMachineAPIKeys(ctx context.Context, machineID int) error {
+	return fmt.Errorf("not implemented")
+}
+
+func (m *mockStore) GetActiveAPIKeyForMachine(ctx context.Context, machineID int) (*storage.MachineAPIKey, error) {
+	return nil, fmt.Errorf("not implemented")
+}
+
+func (m *mockStore) GetMachineAPIKeyByHash(ctx context.Context, apiKeyHash string) (*storage.MachineAPIKey, error) {
+	return nil, fmt.Errorf("not implemented")
+}
+
+func (m *mockStore) ListMachineAPIKeys(ctx context.Context, machineID int) ([]storage.MachineAPIKey, error) {
+	return nil, fmt.Errorf("not implemented")
+}
+
 func (m *mockStore) Close() error {
 	return nil
 }

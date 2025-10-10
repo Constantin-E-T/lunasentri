@@ -116,6 +116,15 @@ type Store interface {
 	UpdateMachineDetails(ctx context.Context, id int, updates map[string]interface{}) error
 	DeleteMachine(ctx context.Context, id int, userID int) error
 
+	// Machine credential management
+	SetMachineEnabled(ctx context.Context, machineID int, enabled bool) error
+	CreateMachineAPIKey(ctx context.Context, machineID int, apiKeyHash string) (*MachineAPIKey, error)
+	RevokeMachineAPIKey(ctx context.Context, keyID int) error
+	RevokeAllMachineAPIKeys(ctx context.Context, machineID int) error
+	GetActiveAPIKeyForMachine(ctx context.Context, machineID int) (*MachineAPIKey, error)
+	GetMachineAPIKeyByHash(ctx context.Context, apiKeyHash string) (*MachineAPIKey, error)
+	ListMachineAPIKeys(ctx context.Context, machineID int) ([]MachineAPIKey, error)
+
 	// Machine heartbeat notification tracking
 	RecordMachineOfflineNotification(ctx context.Context, machineID int, notifiedAt time.Time) error
 	GetMachineLastOfflineNotification(ctx context.Context, machineID int) (time.Time, error)

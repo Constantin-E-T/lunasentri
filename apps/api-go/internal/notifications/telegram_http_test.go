@@ -304,6 +304,35 @@ func (m *mockTelegramStore) ClearMachineOfflineNotification(ctx context.Context,
 	return nil
 }
 
+// Machine credential management methods (not implemented for these tests)
+func (m *mockTelegramStore) SetMachineEnabled(ctx context.Context, machineID int, enabled bool) error {
+	return fmt.Errorf("not implemented")
+}
+
+func (m *mockTelegramStore) CreateMachineAPIKey(ctx context.Context, machineID int, apiKeyHash string) (*storage.MachineAPIKey, error) {
+	return nil, fmt.Errorf("not implemented")
+}
+
+func (m *mockTelegramStore) RevokeMachineAPIKey(ctx context.Context, keyID int) error {
+	return fmt.Errorf("not implemented")
+}
+
+func (m *mockTelegramStore) RevokeAllMachineAPIKeys(ctx context.Context, machineID int) error {
+	return fmt.Errorf("not implemented")
+}
+
+func (m *mockTelegramStore) GetActiveAPIKeyForMachine(ctx context.Context, machineID int) (*storage.MachineAPIKey, error) {
+	return nil, fmt.Errorf("not implemented")
+}
+
+func (m *mockTelegramStore) GetMachineAPIKeyByHash(ctx context.Context, apiKeyHash string) (*storage.MachineAPIKey, error) {
+	return nil, fmt.Errorf("not implemented")
+}
+
+func (m *mockTelegramStore) ListMachineAPIKeys(ctx context.Context, machineID int) ([]storage.MachineAPIKey, error) {
+	return nil, fmt.Errorf("not implemented")
+}
+
 func (m *mockTelegramStore) Close() error {
 	return nil
 }

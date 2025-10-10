@@ -108,6 +108,11 @@ func (s *Service) AuthenticateMachine(ctx context.Context, apiKey string) (*stor
 		return nil, fmt.Errorf("invalid API key")
 	}
 
+	// Check if machine is enabled
+	if !machine.IsEnabled {
+		return nil, fmt.Errorf("machine disabled")
+	}
+
 	return machine, nil
 }
 
@@ -258,4 +263,79 @@ func (s *Service) UpdateMachine(ctx context.Context, machineID, userID int, name
 
 	// Perform update in storage layer
 	return s.store.UpdateMachineDetails(ctx, machineID, updates)
+}
+
+// DisableMachine disables a machine, preventing it from posting metrics
+func (s *Service) DisableMachine(ctx context.Context, machineID, userID int) error {
+	// Verify ownership
+	machine, err := s.GetMachine(ctx, machineID, userID)
+	if err != nil {
+		return err
+	}
+
+	// Disable the machine
+	if err := s.store.SetMachineEnabled(ctx, machine.ID, false); err != nil {
+		return fmt.Errorf("failed to disable machine: %w", err)
+	}
+
+	return nil
+}
+
+// EnableMachine re-enables a machine
+func (s *Service) EnableMachine(ctx context.Context, machineID, userID int) error {
+	// Verify ownership
+	machine, err := s.GetMachine(ctx, machineID, userID)
+	if err != nil {
+		return err
+	}
+
+	// Enable the machine
+	if err := s.store.SetMachineEnabled(ctx, machine.ID, true); err != nil {
+		return fmt.Errorf("failed to enable machine: %w", err)
+	}
+
+	return nil
+}
+
+// RotateMachineAPIKey generates a new API key for a machine and revokes the old one
+func (s *Service) RotateMachineAPIKey(ctx context.Context, machineID, userID int) (string, error) {
+	// Verify ownership
+	machine, err := s.GetMachine(ctx, machineID, userID)
+	if err != nil {
+		return "", err
+	}
+
+	// Generate new API key
+	newAPIKey, err := GenerateAPIKey()
+	if err != nil {
+		return "", fmt.Errorf("failed to generate new API key: %w", err)
+	}
+
+	// Hash the new API key
+	newAPIKeyHash := HashAPIKey(newAPIKey)
+
+	// Revoke all existing keys for this machine
+	if err := s.store.RevokeAllMachineAPIKeys(ctx, machine.ID); err != nil {
+		return "", fmt.Errorf("failed to revoke existing API keys: %w", err)
+	}
+
+	// Create new API key entry
+	if _, err := s.store.CreateMachineAPIKey(ctx, machine.ID, newAPIKeyHash); err != nil {
+		return "", fmt.Errorf("failed to create new API key: %w", err)
+	}
+
+	// Return the plaintext API key (only time it's visible)
+	return newAPIKey, nil
+}
+
+// GetMachineAPIKeyInfo retrieves information about a machine's API keys
+func (s *Service) GetMachineAPIKeyInfo(ctx context.Context, machineID, userID int) ([]storage.MachineAPIKey, error) {
+	// Verify ownership
+	machine, err := s.GetMachine(ctx, machineID, userID)
+	if err != nil {
+		return nil, err
+	}
+
+	// Get all API keys for this machine
+	return s.store.ListMachineAPIKeys(ctx, machine.ID)
 }

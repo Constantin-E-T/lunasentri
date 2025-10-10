@@ -173,6 +173,23 @@ func NewRouter(cfg *RouterConfig) *http.ServeMux {
 	// Machine management endpoints (session authenticated)
 	mux.Handle("/machines", cfg.AuthService.RequireAuth(handleListMachines(cfg.MachineService)))
 	mux.Handle("/machines/", cfg.AuthService.RequireAuth(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// Handle /machines/:id/disable
+		if strings.HasSuffix(r.URL.Path, "/disable") && r.Method == http.MethodPost {
+			handleDisableMachine(cfg.MachineService)(w, r)
+			return
+		}
+		// Handle /machines/:id/enable
+		if strings.HasSuffix(r.URL.Path, "/enable") && r.Method == http.MethodPost {
+			handleEnableMachine(cfg.MachineService)(w, r)
+			return
+		}
+		// Handle /machines/:id/rotate-key
+		if strings.HasSuffix(r.URL.Path, "/rotate-key") && r.Method == http.MethodPost {
+			handleRotateMachineAPIKey(cfg.MachineService)(w, r)
+			return
+		}
+
+		// Handle basic CRUD operations
 		switch r.Method {
 		case http.MethodDelete:
 			handleDeleteMachine(cfg.MachineService)(w, r)

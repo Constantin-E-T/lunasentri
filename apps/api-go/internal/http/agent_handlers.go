@@ -333,3 +333,160 @@ func handleUpdateMachine(machineService *machines.Service) http.HandlerFunc {
 		})
 	}
 }
+
+// handleDisableMachine handles POST /machines/:id/disable (requires session auth)
+func handleDisableMachine(machineService *machines.Service) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
+
+		// Get authenticated user from context
+		user, ok := auth.GetUserFromContext(r.Context())
+		if !ok {
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusUnauthorized)
+			json.NewEncoder(w).Encode(map[string]string{"error": "Unauthorized"})
+			return
+		}
+
+		// Extract machine ID from URL path
+		pathParts := strings.Split(strings.Trim(r.URL.Path, "/"), "/")
+		if len(pathParts) < 2 {
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusBadRequest)
+			json.NewEncoder(w).Encode(map[string]string{"error": "Invalid path"})
+			return
+		}
+
+		machineID, err := strconv.Atoi(pathParts[1])
+		if err != nil {
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusBadRequest)
+			json.NewEncoder(w).Encode(map[string]string{"error": "Invalid machine ID"})
+			return
+		}
+
+		// Disable the machine
+		if err := machineService.DisableMachine(r.Context(), machineID, user.ID); err != nil {
+			log.Printf("Failed to disable machine %d for user %d: %v", machineID, user.ID, err)
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusInternalServerError)
+			json.NewEncoder(w).Encode(map[string]string{"error": "Failed to disable machine"})
+			return
+		}
+
+		log.Printf("Machine disabled: id=%d, user_id=%d", machineID, user.ID)
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(map[string]string{
+			"message": "Machine disabled successfully",
+		})
+	}
+}
+
+// handleEnableMachine handles POST /machines/:id/enable (requires session auth)
+func handleEnableMachine(machineService *machines.Service) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
+
+		// Get authenticated user from context
+		user, ok := auth.GetUserFromContext(r.Context())
+		if !ok {
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusUnauthorized)
+			json.NewEncoder(w).Encode(map[string]string{"error": "Unauthorized"})
+			return
+		}
+
+		// Extract machine ID from URL path
+		pathParts := strings.Split(strings.Trim(r.URL.Path, "/"), "/")
+		if len(pathParts) < 2 {
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusBadRequest)
+			json.NewEncoder(w).Encode(map[string]string{"error": "Invalid path"})
+			return
+		}
+
+		machineID, err := strconv.Atoi(pathParts[1])
+		if err != nil {
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusBadRequest)
+			json.NewEncoder(w).Encode(map[string]string{"error": "Invalid machine ID"})
+			return
+		}
+
+		// Enable the machine
+		if err := machineService.EnableMachine(r.Context(), machineID, user.ID); err != nil {
+			log.Printf("Failed to enable machine %d for user %d: %v", machineID, user.ID, err)
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusInternalServerError)
+			json.NewEncoder(w).Encode(map[string]string{"error": "Failed to enable machine"})
+			return
+		}
+
+		log.Printf("Machine enabled: id=%d, user_id=%d", machineID, user.ID)
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(map[string]string{
+			"message": "Machine enabled successfully",
+		})
+	}
+}
+
+// handleRotateMachineAPIKey handles POST /machines/:id/rotate-key (requires session auth)
+func handleRotateMachineAPIKey(machineService *machines.Service) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
+
+		// Get authenticated user from context
+		user, ok := auth.GetUserFromContext(r.Context())
+		if !ok {
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusUnauthorized)
+			json.NewEncoder(w).Encode(map[string]string{"error": "Unauthorized"})
+			return
+		}
+
+		// Extract machine ID from URL path
+		pathParts := strings.Split(strings.Trim(r.URL.Path, "/"), "/")
+		if len(pathParts) < 2 {
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusBadRequest)
+			json.NewEncoder(w).Encode(map[string]string{"error": "Invalid path"})
+			return
+		}
+
+		machineID, err := strconv.Atoi(pathParts[1])
+		if err != nil {
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusBadRequest)
+			json.NewEncoder(w).Encode(map[string]string{"error": "Invalid machine ID"})
+			return
+		}
+
+		// Rotate the API key
+		newAPIKey, err := machineService.RotateMachineAPIKey(r.Context(), machineID, user.ID)
+		if err != nil {
+			log.Printf("Failed to rotate API key for machine %d, user %d: %v", machineID, user.ID, err)
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusInternalServerError)
+			json.NewEncoder(w).Encode(map[string]string{"error": "Failed to rotate API key"})
+			return
+		}
+
+		log.Printf("API key rotated for machine: id=%d, user_id=%d", machineID, user.ID)
+
+		// Return the new API key (only time it's visible)
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(map[string]interface{}{
+			"message": "API key rotated successfully",
+			"api_key": newAPIKey,
+		})
+	}
+}
