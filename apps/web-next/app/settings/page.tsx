@@ -2,8 +2,9 @@
 
 import { useState, FormEvent, useEffect } from "react";
 import { useRouter } from "next/navigation";
-import Link from "next/link";
 import { useSession } from "@/lib/useSession";
+import { useAlertsWithNotifications } from "@/lib/alerts";
+import { Navbar } from "@/components/Navbar";
 import { useWebhooks } from "@/lib/alerts/useWebhooks";
 import type {
   WebhookWithState,
@@ -20,8 +21,13 @@ import { useToast } from "@/components/ui/use-toast";
 
 export default function SettingsPage() {
   const router = useRouter();
-  const { status, changePassword } = useSession();
+  const { status, user, logout, changePassword } = useSession();
   const { toast } = useToast();
+  const { events, newAlertsCount } = useAlertsWithNotifications(10);
+
+  // Count unacknowledged events
+  const unacknowledgedCount =
+    events?.filter((e) => !e.acknowledged).length || 0;
 
   // Password change state
   const [currentPassword, setCurrentPassword] = useState("");
@@ -208,43 +214,15 @@ export default function SettingsPage() {
 
   return (
     <div className="min-h-screen">
-      {/* Header */}
-      <div className="border-b border-border/40 bg-card/40 backdrop-blur-xl">
-        <div className="max-w-7xl mx-auto px-4 py-4 flex justify-between items-center">
-          <div className="flex items-center gap-3">
-            <Link
-              href="/"
-              className="flex items-center gap-3 hover:opacity-80 transition-opacity"
-            >
-              <span className="text-2xl">🌙</span>
-              <span className="text-primary font-semibold">LunaSentri</span>
-            </Link>
-          </div>
-          <div className="flex items-center gap-4">
-            <Link
-              href="/"
-              className="text-sm text-muted-foreground hover:text-foreground transition-colors"
-            >
-              Dashboard
-            </Link>
-            <Link
-              href="/alerts"
-              className="text-sm text-muted-foreground hover:text-foreground transition-colors"
-            >
-              Alerts
-            </Link>
-            <Link
-              href="/notifications/telegram"
-              className="text-sm text-muted-foreground hover:text-foreground transition-colors"
-            >
-              Telegram Alerts
-            </Link>
-          </div>
-        </div>
-      </div>
+      <Navbar
+        user={user}
+        unacknowledgedCount={unacknowledgedCount}
+        newAlertsCount={newAlertsCount}
+        onLogout={logout}
+      />
 
       {/* Main Content */}
-      <div className="max-w-2xl mx-auto px-4 py-12">
+      <div className="max-w-7xl mx-auto px-4 py-12">
         <div className="mb-8">
           <h1 className="text-3xl font-bold text-primary mb-2">Settings</h1>
           <p className="text-muted-foreground">Manage your account settings</p>

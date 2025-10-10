@@ -2,9 +2,10 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import Link from "next/link";
 import { useSession } from "@/lib/useSession";
 import { useMachines } from "@/lib/useMachines";
+import { useAlertsWithNotifications } from "@/lib/alerts";
+import { Navbar } from "@/components/Navbar";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -27,8 +28,13 @@ interface RegisterFormData {
 
 export default function MachinesPage() {
   const router = useRouter();
-  const { status, user } = useSession();
+  const { status, user, logout } = useSession();
   const { machines, loading, error, refresh, register } = useMachines();
+  const { events, newAlertsCount } = useAlertsWithNotifications(10);
+
+  // Count unacknowledged events from live data
+  const unacknowledgedCount =
+    events?.filter((e) => !e.acknowledged).length || 0;
 
   const [showRegisterModal, setShowRegisterModal] = useState(false);
   const [registering, setRegistering] = useState(false);
@@ -215,36 +221,16 @@ export default function MachinesPage() {
 
   return (
     <div className="min-h-screen">
-      {/* Header */}
-      <div className="border-b border-border/40 bg-card/40 backdrop-blur-xl">
-        <div className="max-w-6xl mx-auto px-6 py-4 flex flex-wrap gap-4 justify-between items-center">
-          <div className="flex items-center gap-3 text-primary">
-            <span className="text-2xl">🌙</span>
-            <span className="font-semibold tracking-wide">LunaSentri</span>
-          </div>
-          <div className="flex items-center gap-3 text-sm">
-            <Link
-              href="/"
-              className="rounded-full bg-card/40 border border-border/30 px-4 py-2 text-muted-foreground transition-all duration-200 hover:text-foreground hover:border-border"
-            >
-              Dashboard
-            </Link>
-            <Link
-              href="/alerts"
-              className="rounded-full bg-card/40 border border-border/30 px-4 py-2 text-muted-foreground transition-all duration-200 hover:text-foreground hover:border-border"
-            >
-              Alerts
-            </Link>
-            <span className="text-muted-foreground hidden sm:inline">
-              {user?.email}
-            </span>
-          </div>
-        </div>
-      </div>
+      <Navbar
+        user={user}
+        unacknowledgedCount={unacknowledgedCount}
+        newAlertsCount={newAlertsCount}
+        onLogout={logout}
+      />
 
       {/* Main Content */}
-      <div className="min-h-[calc(100vh-82px)] px-4 py-8">
-        <div className="max-w-6xl mx-auto">
+      <div className="px-4 py-8">
+        <div className="max-w-7xl mx-auto">
           <div className="space-y-6">
             {/* Page Header */}
             <div className="flex justify-between items-center">

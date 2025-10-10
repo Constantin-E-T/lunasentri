@@ -96,7 +96,24 @@ async function request<T>(input: RequestInfo | URL, init?: RequestInit): Promise
   }
 
   if (!response.ok) {
-    throw new Error(`Request failed: ${response.status} ${response.statusText}`);
+    // Try to get error message from response body
+    let errorMessage = `Request failed: ${response.status} ${response.statusText}`;
+    try {
+      const contentType = response.headers.get('content-type');
+      if (contentType && contentType.includes('application/json')) {
+        const errorData = await response.json();
+        errorMessage = errorData.error || errorData.message || errorMessage;
+      } else {
+        // Plain text error from http.Error()
+        const errorText = await response.text();
+        if (errorText) {
+          errorMessage = errorText;
+        }
+      }
+    } catch (e) {
+      // If parsing fails, use the default error message
+    }
+    throw new Error(errorMessage);
   }
 
   return response.json();
@@ -125,7 +142,24 @@ async function requestVoid(input: RequestInfo | URL, init?: RequestInit): Promis
   }
 
   if (!response.ok) {
-    throw new Error(`Request failed: ${response.status} ${response.statusText}`);
+    // Try to get error message from response body
+    let errorMessage = `Request failed: ${response.status} ${response.statusText}`;
+    try {
+      const contentType = response.headers.get('content-type');
+      if (contentType && contentType.includes('application/json')) {
+        const errorData = await response.json();
+        errorMessage = errorData.error || errorData.message || errorMessage;
+      } else {
+        // Plain text error from http.Error()
+        const errorText = await response.text();
+        if (errorText) {
+          errorMessage = errorText;
+        }
+      }
+    } catch (e) {
+      // If parsing fails, use the default error message
+    }
+    throw new Error(errorMessage);
   }
 }
 

@@ -2,8 +2,9 @@
 
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
-import Link from "next/link";
 import { useSession } from "@/lib/useSession";
+import { useAlertsWithNotifications } from "@/lib/alerts";
+import { Navbar } from "@/components/Navbar";
 import { useToast } from "@/components/ui/use-toast";
 import type {
   TelegramRecipient,
@@ -25,8 +26,13 @@ import { Button } from "@/components/ui/button";
 
 export default function TelegramNotificationsPage() {
   const router = useRouter();
-  const { status, user } = useSession();
+  const { status, user, logout } = useSession();
   const { toast } = useToast();
+  const { events, newAlertsCount } = useAlertsWithNotifications(10);
+
+  // Count unacknowledged events
+  const unacknowledgedCount =
+    events?.filter((e) => !e.acknowledged).length || 0;
 
   const [recipients, setRecipients] = useState<TelegramRecipient[]>([]);
   const [loading, setLoading] = useState(true);
@@ -158,51 +164,16 @@ export default function TelegramNotificationsPage() {
 
   return (
     <div className="min-h-screen">
-      {/* Navigation */}
-      <div className="border-b border-border/40 bg-card/40 backdrop-blur-xl">
-        <div className="max-w-6xl mx-auto px-6 py-4 flex flex-wrap gap-4 justify-between items-center">
-          <div className="flex items-center gap-3 text-primary">
-            <Link href="/" className="flex items-center gap-3 hover:opacity-80">
-              <span className="text-2xl">🌙</span>
-              <span className="font-semibold tracking-wide">LunaSentri</span>
-            </Link>
-          </div>
-          <div className="flex items-center gap-3 text-sm">
-            <Link
-              href="/"
-              className="rounded-full bg-card/40 border border-border/30 px-4 py-2 text-muted-foreground transition-all duration-200 hover:text-foreground hover:border-border"
-            >
-              Dashboard
-            </Link>
-            {user?.is_admin && (
-              <>
-                <Link
-                  href="/alerts"
-                  className="rounded-full bg-card/40 border border-border/30 px-4 py-2 text-muted-foreground transition-all duration-200 hover:text-foreground hover:border-border"
-                >
-                  Alerts
-                </Link>
-                <Link
-                  href="/users"
-                  className="rounded-full bg-card/40 border border-border/30 px-4 py-2 text-muted-foreground transition-all duration-200 hover:text-foreground hover:border-border"
-                >
-                  Manage Users
-                </Link>
-              </>
-            )}
-            <Link
-              href="/settings"
-              className="rounded-full bg-card/40 border border-border/30 px-4 py-2 text-muted-foreground transition-all duration-200 hover:text-foreground hover:border-border"
-            >
-              Settings
-            </Link>
-          </div>
-        </div>
-      </div>
+      <Navbar
+        user={user}
+        unacknowledgedCount={unacknowledgedCount}
+        newAlertsCount={newAlertsCount}
+        onLogout={logout}
+      />
 
       {/* Main Content */}
-      <div className="min-h-[calc(100vh-82px)] px-4 py-8">
-        <div className="max-w-6xl mx-auto space-y-8">
+      <div className="px-4 py-8">
+        <div className="max-w-7xl mx-auto space-y-8">
           {/* Header */}
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
             <div className="space-y-2">
